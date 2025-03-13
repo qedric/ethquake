@@ -1,114 +1,79 @@
-import { client } from './mongodb.js'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-console.log("ETH Wallet Analysis System Starting...")
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-// tx's with values over 100 ETH in given timeframe:
-`https://insight.thirdweb.com/v1/transactions?chain=1&filter_block_timestamp_gte=1740932700&filter_block_timestamp_lte=1740933900&sort_by=block_number&sort_order=desc&filter_value_gte=100000000000000000000&limit=200&clientId=YOUR_THIRDWEB_CLIENT_ID`
-
-async function findLargeMovements(n) {
-  console.log("Starting aggregation...")
-
-  const agg = [
-    {
-      '$sort': {
-        'timestamp': -1
-      }
-    }, {
-      '$group': {
-        '_id': null, 
-        'docs': {
-          '$push': '$$ROOT'
-        }
-      }
-    }, 
-    {
-      '$project': {
-        'docs': {
-          '$map': {
-            'input': {
-              '$range': [
-                1, {
-                  '$subtract': [
-                    {
-                      '$size': '$docs'
-                    }, 1
-                  ]
-                }
-              ]
-            }, 
-            'as': 'idx', 
-            'in': {
-              '$let': {
-                'vars': {
-                  'current': {
-                    '$arrayElemAt': [
-                      '$docs', '$$idx'
-                    ]
-                  }, 
-                  'previous': {
-                    '$arrayElemAt': [
-                      '$docs', {
-                        '$subtract': [
-                          '$$idx', 1
-                        ]
-                      }
-                    ]
-                  }
-                }, 
-                'in': {
-                  '$cond': {
-                    'if': {
-                      '$gt': [
-                        {
-                          '$abs': {
-                            '$subtract': [
-                              '$$current.price', '$$previous.price'
-                            ]
-                          }
-                        }, {
-                          '$multiply': [
-                            '$$previous.price', n
-                          ]
-                        }
-                      ]
-                    }, 
-                    'then': '$$current', 
-                    'else': null
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }, {
-      '$unwind': '$docs'
-    }, {
-      '$match': {
-        'docs': {
-          '$ne': null
-        }
-      }
-    }, {
-      '$replaceRoot': {
-        'newRoot': '$docs'
-      }
+function ensureDirectoryExists(directory) {
+    if (!fs.existsSync(directory)) {
+        fs.mkdirSync(directory, { recursive: true })
     }
-  ]
-
-  const coll = client.db('cryptoData').collection('ethPrices')
-  const cursor = coll.aggregate(agg)
-  const result = await cursor.toArray()
-  await client.close()
-  return result
 }
 
-findLargeMovements(0.01)
-  .then(result => {
-    console.log(result, `${result.length} results:`)
-    process.exit(0) // Terminate the program successfully
-  })
-  .catch(err => {
-    console.error("Error:", err)
-    process.exit(1) // Terminate the program with an error
-  })
+function countAddressesInFiles(directory) {
+    ensureDirectoryExists(directory)
+    const files = fs.readdirSync(directory)
+    const addressCount = {}
+
+    files.forEach(file => {
+        const filePath = path.join(directory, file)
+        if (fs.statSync(filePath).isFile() && filePath.endsWith('.json')) {
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+            const addressesInFile = new Set()
+
+            data.forEach(entry => {
+                if (entry.to_address) {
+                    const toAddress = entry.to_address
+                    if (!addressCount[toAddress]) {
+                        addressCount[toAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
+                    }
+                    addressCount[toAddress].toCount++
+                    addressesInFile.add(toAddress)
+                }
+
+                if (entry.from_address) {
+                    const fromAddress = entry.from_address
+                    if (!addressCount[fromAddress]) {
+                        addressCount[fromAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
+                    }
+                    addressCount[fromAddress].fromCount++
+                    addressesInFile.add(fromAddress)
+                }
+            })
+
+            addressesInFile.forEach(address => {
+                addressCount[address].fileCount++
+            })
+        }
+    })
+
+    return addressCount
+}
+
+function generateReport() {
+    const dataDir = path.join(__dirname, 'data')
+    const controlDir = path.join(__dirname, 'data', 'control')
+
+    const addressCount = countAddressesInFiles(dataDir)
+    const controlAddressCount = countAddressesInFiles(controlDir)
+
+    const combinedAddressCount = { ...addressCount }
+
+    for (const [address, counts] of Object.entries(controlAddressCount)) {
+        if (!combinedAddressCount[address]) {
+            combinedAddressCount[address] = counts
+        } else {
+            combinedAddressCount[address].toCount += counts.toCount
+            combinedAddressCount[address].fromCount += counts.fromCount
+            combinedAddressCount[address].fileCount += counts.fileCount
+        }
+    }
+
+    console.log('Address Report:')
+    for (const [address, counts] of Object.entries(combinedAddressCount)) {
+        console.log(`Address: ${address}, To Count: ${counts.toCount}, From Count: ${counts.fromCount}, File Count: ${counts.fileCount}`)
+    }
+}
+
+generateReport()
