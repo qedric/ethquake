@@ -11,49 +11,55 @@ function ensureDirectoryExists(directory) {
     }
 }
 
-function countAddressesInFiles(directory) {
-    ensureDirectoryExists(directory)
-    const files = fs.readdirSync(directory)
-    const addressCount = {}
+function countAddressesInFiles(files) {
+    // Check if 'files' is an array
+    if (Array.isArray(files)) {
+        files.forEach(file => {
+            const data = readDataFromFile(file) // Assuming this is how you're getting 'data'
+            
+            // Parse the JSON data
+            try {
+                const jsonData = JSON.parse(data)
+                
+                if (jsonData && Array.isArray(jsonData.data)) {
+                    jsonData.data.forEach(entry => {
+                        if (entry.to_address) {
+                            const toAddress = entry.to_address
+                            if (!addressCount[toAddress]) {
+                                addressCount[toAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
+                            }
+                            addressCount[toAddress].toCount++
+                            addressesInFile.add(toAddress)
+                        }
 
-    files.forEach(file => {
-        const filePath = path.join(directory, file)
-        if (fs.statSync(filePath).isFile() && filePath.endsWith('.json')) {
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
-            const addressesInFile = new Set()
+                        if (entry.from_address) {
+                            const fromAddress = entry.from_address
+                            if (!addressCount[fromAddress]) {
+                                addressCount[fromAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
+                            }
+                            addressCount[fromAddress].fromCount++
+                            addressesInFile.add(fromAddress)
+                        }
+                    })
 
-            data.forEach(entry => {
-                if (entry.to_address) {
-                    const toAddress = entry.to_address
-                    if (!addressCount[toAddress]) {
-                        addressCount[toAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
-                    }
-                    addressCount[toAddress].toCount++
-                    addressesInFile.add(toAddress)
+                    addressesInFile.forEach(address => {
+                        addressCount[address].fileCount++
+                    })
+                } else {
+                    console.error('Parsed data does not contain a valid "data" array:', jsonData)
                 }
-
-                if (entry.from_address) {
-                    const fromAddress = entry.from_address
-                    if (!addressCount[fromAddress]) {
-                        addressCount[fromAddress] = { toCount: 0, fromCount: 0, fileCount: 0 }
-                    }
-                    addressCount[fromAddress].fromCount++
-                    addressesInFile.add(fromAddress)
-                }
-            })
-
-            addressesInFile.forEach(address => {
-                addressCount[address].fileCount++
-            })
-        }
-    })
-
-    return addressCount
+            } catch (error) {
+                console.error('Failed to parse JSON:', error)
+            }
+        })
+    } else {
+        console.error('Files is not an array:', files)
+    }
 }
 
 function generateReport() {
-    const dataDir = path.join(__dirname, 'data')
-    const controlDir = path.join(__dirname, 'data', 'control')
+    const dataDir = path.join(__dirname, '..', 'data')
+    const controlDir = path.join(__dirname, '..', 'data', 'control')
 
     const addressCount = countAddressesInFiles(dataDir)
     const controlAddressCount = countAddressesInFiles(controlDir)
