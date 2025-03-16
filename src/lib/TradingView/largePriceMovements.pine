@@ -1,0 +1,34 @@
+//@version=6
+indicator("Large Price Movements", overlay=true)
+
+// === INPUTS ===
+n_percent = input.float(6, title="Threshold % Move", step=0.1)  // % Threshold
+lookback = input.int(12, title="Lookback Bars", minval=1)       // Lookback period
+use_range = input.bool(true, title="Use High-Low Range?")       // Toggle between Entry/Exit vs. Range
+
+// === CALCULATIONS ===
+percent_move_entry_exit = 100 * (close - close[lookback]) / close[lookback]  // Close-to-Close Change
+percent_move_range = 100 * (high - low) / low  // High-Low Range Change
+
+percent_move = use_range ? percent_move_range : percent_move_entry_exit
+
+// === DETECT HIGH RANGE MOVES EVEN IF OPEN = CLOSE ===
+condition_entry_exit = math.abs(percent_move_entry_exit) >= n_percent  // Using your `math.abs`
+condition_range = percent_move_range >= n_percent
+
+condition = use_range ? condition_range : condition_entry_exit
+
+// === PLOT EVENTS ===
+bgcolor(condition ? color.blue : na)  // Highlight detected bars
+label_condition = condition and not condition[1]  // Avoid duplicates
+label_pos = close > close[lookback] ? high : low  // Label position
+
+// Smaller, cleaner labels
+if label_condition
+    label.new(x=bar_index, y=label_pos, text=str.tostring(time / 1000), 
+              color=color.white, textcolor=color.black, size=size.small, xloc=xloc.bar_index)
+
+// === LOG FORMATTED TIMESTAMP TO CONSOLE ===
+if condition
+    formatted_date = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", time)  // Human-readable date
+    log.info("got one: " + formatted_date + " (Unix: " + str.tostring(time / 1000) + ")")
