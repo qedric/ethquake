@@ -27,8 +27,7 @@ const __dirname = path.dirname(__filename)
 // Constants
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
 const OUTPUT_DIR = path.join(__dirname, '../data')
-const MIN_ETH_VALUE = 100 // Minimum ETH value for transactions (100 ETH)
-const WEI_PER_ETH = 10n ** 18n // 10^18 instead of the hardcoded value
+const MIN_ETH_VALUE = '100000000000000000000' // Minimum ETH value for transactions (100 ETH)
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')
@@ -75,10 +74,9 @@ function generateControlTimestamps(priceMovements, count) {
 // Fetch transactions for a given time range
 async function fetchTransactions(startTimestamp, endTimestamp, options = {}) {
   try {
-    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&filter_block_timestamp_gte=${startTimestamp}&filter_block_timestamp_lte=${endTimestamp}&sort_by=block_number&sort_order=desc&filter_value_gte=${(BigInt(MIN_ETH_VALUE) * WEI_PER_ETH).toString()}&limit=200&clientId=${TW_CLIENT_ID}`
+    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&filter_block_timestamp_gte=${startTimestamp}&filter_block_timestamp_lte=${endTimestamp}&sort_by=block_number&sort_order=desc&filter_value_gte=${MIN_ETH_VALUE}&limit=200&clientId=${TW_CLIENT_ID}`
     
-     
-
+    
     // Add optional filters
     if (options.fromAddress) {
       url += `&filter_from_address=${options.fromAddress}`
@@ -92,10 +90,10 @@ async function fetchTransactions(startTimestamp, endTimestamp, options = {}) {
     if (options.toAddress) console.log(`To address: ${options.toAddress}`)
     
     const response = await axios.get(url)
-    return response.data.data
+    return response.data.data || [] // Return empty array if data is undefined
   } catch (error) {
     console.error('Error fetching transactions:', error)
-    throw error
+    return [] // Return empty array on error
   }
 }
 
@@ -129,10 +127,10 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       // Add to our collection with metadata
       const processedTxs = transactions.map(tx => ({
         ...tx,
+        valueString: tx.value.toString(),
         priceMovementTimestamp: movementTimestamp,
         priceMovementDateTime: movement.date,
         txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-        valueInEth: Number(tx.value) / Number(WEI_PER_ETH),
         group: 'target' // Mark as part of target group
       }))
       
@@ -196,7 +194,6 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
         controlTimestamp: controlTimestamp,
         controlDateTime: control.date,
         txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-        valueInEth: Number(tx.value) / Number(WEI_PER_ETH),
         group: 'control' // Mark as part of control group
       }))
       
