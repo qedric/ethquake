@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "get-prices": "node src/getPrices.js",
-    "a": "node src/analyse.js"
+    "a": "node src/analyse.js",
+    "extract": "node src/extract_addresses.js",
+    "plot": "node src/plot.js"
   },
   "keywords": [],
   "author": "",

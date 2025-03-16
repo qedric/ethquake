@@ -1,5 +1,5 @@
 //@version=6
-indicator("Large ETH Price Movements with Logs", overlay=true)
+indicator("Large Price Movements", overlay=true)
 
 // === INPUTS ===
 n_percent = input.float(6, title="Threshold % Move", step=0.1)  // % Threshold
