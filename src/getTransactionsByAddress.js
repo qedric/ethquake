@@ -96,8 +96,11 @@ async function getTransactionsByAddresses(addressesFilePath, startTimestamp, min
         if (tx.to_address) relatedAddresses.add(tx.to_address.toLowerCase())
         
         return {
-          ...tx,
+          hash: tx.hash,
+          from_address: tx.from_address,
+          to_address: tx.to_address,
           txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+          value: tx.value,
           valueInEth: Number(tx.value) / (10 ** 18),
           addressOfInterest: address,
           direction: 'sent'
@@ -109,8 +112,11 @@ async function getTransactionsByAddresses(addressesFilePath, startTimestamp, min
         if (tx.from_address) relatedAddresses.add(tx.from_address.toLowerCase())
         
         return {
-          ...tx,
+          hash: tx.hash,
+          from_address: tx.from_address,
+          to_address: tx.to_address,
           txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+          value: tx.value,
           valueInEth: Number(tx.value) / (10 ** 18),
           addressOfInterest: address,
           direction: 'received'
