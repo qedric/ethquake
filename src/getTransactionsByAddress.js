@@ -64,70 +64,89 @@ async function getTransactionsByAddresses(addressesFilePath, startTimestamp, min
     const addressesProcessed = new Set()
     const relatedAddresses = new Set()
     
-    // Process each address
-    for (let i = 0; i < addresses.length; i++) {
-      const address = addresses[i]
+    // Process addresses in batches of 10
+    const BATCH_SIZE = 10
+    
+    for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+      const batch = addresses.slice(i, i + BATCH_SIZE)
+      const uniqueBatch = batch.filter(address => !addressesProcessed.has(address.toLowerCase()))
       
-      if (addressesProcessed.has(address.toLowerCase())) {
-        console.log(`Skipping duplicate address: ${address}`)
-        continue
+      console.log(`Processing batch ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(addresses.length/BATCH_SIZE)}: ${uniqueBatch.length} unique addresses`)
+      
+      // Create promises for all fetch operations in this batch
+      const batchPromises = []
+      
+      for (const address of uniqueBatch) {
+        addressesProcessed.add(address.toLowerCase())
+        
+        // Get transactions where this address is the sender
+        const sentPromise = fetchTransactions(startTimestamp, endTimestamp, {
+          fromAddress: address,
+          minEthValue
+        }).then(sentTransactions => {
+          console.log(`Fetched transactions sent FROM ${address}`)
+          
+          // Process and add metadata to transactions
+          return sentTransactions ? sentTransactions.map(tx => {
+            // Add related address to our set
+            if (tx.to_address) relatedAddresses.add(tx.to_address.toLowerCase())
+            
+            return {
+              hash: tx.hash,
+              block_number: tx.block_number,
+              block_timestamp: tx.block_timestamp,
+              from_address: tx.from_address,
+              to_address: tx.to_address,
+              txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+              value: tx.value,
+              valueInEth: Number(tx.value) / (10 ** 18),
+              addressOfInterest: address,
+              direction: 'sent'
+            }
+          }) : []
+        })
+        
+        // Get transactions where this address is the receiver
+        const receivedPromise = fetchTransactions(startTimestamp, endTimestamp, {
+          toAddress: address,
+          minEthValue
+        }).then(receivedTransactions => {
+          console.log(`Fetched transactions sent TO ${address}`)
+          
+          // Process and add metadata to transactions
+          return receivedTransactions ? receivedTransactions.map(tx => {
+            // Add related address to our set
+            if (tx.from_address) relatedAddresses.add(tx.from_address.toLowerCase())
+            
+            return {
+              hash: tx.hash,
+              block_number: tx.block_number,
+              block_timestamp: tx.block_timestamp,
+              from_address: tx.from_address,
+              to_address: tx.to_address,
+              txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+              value: tx.value,
+              valueInEth: Number(tx.value) / (10 ** 18),
+              addressOfInterest: address,
+              direction: 'received'
+            }
+          }) : []
+        })
+        
+        batchPromises.push(sentPromise, receivedPromise)
       }
       
-      addressesProcessed.add(address.toLowerCase())
-      console.log(`Processing address ${i+1}/${addresses.length}: ${address}`)
+      // Wait for all promises in this batch to resolve
+      const batchResults = await Promise.all(batchPromises)
       
-      // Get transactions where this address is the sender
-      console.log(`Fetching transactions sent FROM ${address}`)
-      const sentTransactions = await fetchTransactions(startTimestamp, endTimestamp, {
-        fromAddress: address,
-        minEthValue
+      // Flatten and add all transactions from this batch
+      batchResults.forEach(transactions => {
+        allTransactions.push(...transactions)
       })
       
-      // Get transactions where this address is the receiver
-      console.log(`Fetching transactions sent TO ${address}`)
-      const receivedTransactions = await fetchTransactions(startTimestamp, endTimestamp, {
-        toAddress: address,
-        minEthValue
-      })
-      
-      // Process and add metadata to transactions
-      const processedSentTxs = sentTransactions ? sentTransactions.map(tx => {
-        // Add related address to our set
-        if (tx.to_address) relatedAddresses.add(tx.to_address.toLowerCase())
-        
-        return {
-          hash: tx.hash,
-          from_address: tx.from_address,
-          to_address: tx.to_address,
-          txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-          value: tx.value,
-          valueInEth: Number(tx.value) / (10 ** 18),
-          addressOfInterest: address,
-          direction: 'sent'
-        }
-      }) : []
-      
-      const processedReceivedTxs = receivedTransactions ? receivedTransactions.map(tx => {
-        // Add related address to our set
-        if (tx.from_address) relatedAddresses.add(tx.from_address.toLowerCase())
-        
-        return {
-          hash: tx.hash,
-          from_address: tx.from_address,
-          to_address: tx.to_address,
-          txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-          value: tx.value,
-          valueInEth: Number(tx.value) / (10 ** 18),
-          addressOfInterest: address,
-          direction: 'received'
-        }
-      }) : []
-      
-      allTransactions.push(...processedSentTxs, ...processedReceivedTxs)
-      
-      // Be nice to the API - add a small delay between addresses
-      if (i < addresses.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
+      // Be nice to the API - add a small delay between batches
+      if (i + BATCH_SIZE < addresses.length) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
     }
     
@@ -140,7 +159,7 @@ async function getTransactionsByAddresses(addressesFilePath, startTimestamp, min
     const relatedAddressesPath = path.join(OUTPUT_DIR, `related_addresses_${filenameSuffix}.json`)
     
     // Sort transactions by timestamp
-    allTransactions.sort((a, b) => a.block_timestamp - b.block_timestamp)
+    allTransactions.sort((a, b) => new Date(a.txDateTime) - new Date(b.txDateTime))
     
     // Save all transactions to file
     fs.writeFileSync(outputPath, JSON.stringify(allTransactions, null, 2))
