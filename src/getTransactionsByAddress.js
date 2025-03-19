@@ -2,7 +2,6 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import axios from 'axios'
 import { fetchTransactions } from './getTransactions.js'
 
 /* 
@@ -65,7 +64,7 @@ async function getTransactionsByAddresses(addressesFilePath, startTimestamp, min
     const relatedAddresses = new Set()
     
     // Process addresses in batches of 10
-    const BATCH_SIZE = 10
+    const BATCH_SIZE = 20
     
     for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
       const batch = addresses.slice(i, i + BATCH_SIZE)
