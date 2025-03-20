@@ -3,7 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import axios from 'axios'
-import { getDb, logActivity } from '../mongodb.js'
+import { logActivity } from '..lib/mongodb.js'
 
 // Initialize dotenv before any env vars are accessed
 dotenv.config()
