@@ -6,46 +6,57 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config()
 }
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
+if (!process.env.MONGO_URI) {
+  throw new Error('Invalid/Missing environment variable: "MONGO_URI"')
 }
 
-const uri = process.env.MONGODB_URI
-let client
-let clientPromise
+const uri = process.env.MONGO_URI || 'mongodb://localhost:27017'
+const dbName = process.env.MONGO_DB_NAME || 'ethquake'
 
-if (process.env.NODE_ENV === 'development') {
-  // Reuse connection in development
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(uri)
-    global._mongoClientPromise = client.connect()
+let client = null
+let db = null
+
+async function connectToDatabase() {
+  try {
+    console.log('Connecting to MongoDB...')
+    client = new MongoClient(uri, {
+      connectTimeoutMS: 5000,
+      socketTimeoutMS: 30000,
+      retryWrites: true,
+      retryReads: true
+    })
+    
+    await client.connect()
+    console.log('Successfully connected to MongoDB')
+    
+    db = client.db(dbName)
+    return db
+  } catch (error) {
+    console.error('Failed to connect to MongoDB:', error)
+    throw error
   }
-  clientPromise = global._mongoClientPromise
-} else {
-  // Create new connection in production
-  client = new MongoClient(uri)
-  clientPromise = client.connect()
 }
 
-// Instead of using global, use a module-level variable
-let cachedClient = null
-let cachedDb = null
-
-export async function getDbClient() {
-  if (cachedClient) {
-    return { client: cachedClient, db: cachedDb }
+async function getDb() {
+  if (!db) {
+    db = await connectToDatabase()
   }
-
-  // Connect to MongoDB
-  const client = new MongoClient(process.env.MONGODB_URI)
-  await client.connect()
-  const db = client.db('ethquake')
-  
-  // Cache the connection
-  cachedClient = client
-  cachedDb = db
-  
-  return { client, db }
+  return db
 }
 
-export { client }
+async function logActivity(activity) {
+  try {
+    const db = await getDb()
+    await db.collection('activity_log').insertOne({
+      ...activity,
+      timestamp: new Date()
+    })
+  } catch (error) {
+    console.error('Failed to log activity:', error)
+    // Don't throw here - we don't want logging failures to break the app
+  }
+}
+
+// Usage example: logActivity({ type: 'TRANSACTION_FETCH', count: transactions.length })
+
+export { getDb, connectToDatabase, logActivity }

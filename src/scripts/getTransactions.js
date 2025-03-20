@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import axios from 'axios'
+import { getDb, logActivity } from '../mongodb.js'
 
 // Initialize dotenv before any env vars are accessed
 dotenv.config()
@@ -77,40 +78,60 @@ function generateControlTimestamps(priceMovements, count) {
  * @returns {Array} Array of transaction objects
  */
 async function fetchTransactions(params = {}) {
-  // Use the already checked TW_CLIENT_ID from above
-  if (!TW_CLIENT_ID) {
-    throw new Error('TW_CLIENT_ID was not found. This should have been caught earlier.')
-  }
+  try {
+    // Use the already checked TW_CLIENT_ID from above
+    if (!TW_CLIENT_ID) {
+      throw new Error('TW_CLIENT_ID was not found. This should have been caught earlier.')
+    }
 
-  const baseUrl = 'https://insight.thirdweb.com/v1/transactions'
-  const defaultParams = {
-    chain: '1',
-    sort_by: 'block_number',
-    sort_order: 'desc',
-    limit: '200',
-    clientId: TW_CLIENT_ID
-  }
+    const baseUrl = 'https://insight.thirdweb.com/v1/transactions'
+    const defaultParams = {
+      chain: '1',
+      sort_by: 'block_number',
+      sort_order: 'desc',
+      limit: '200',
+      clientId: TW_CLIENT_ID
+    }
 
-  // Add filter for minimum ETH value if not provided
-  if (!params.filter_value_gte) {
-    defaultParams.filter_value_gte = DEFAULT_MIN_ETH_VALUE
-  }
-  
-  // Add all filters from options
-  for (const [key, value] of Object.entries(params)) {
-    // Skip null or undefined values
-    if (value === null || value === undefined) continue
+    // Add filter for minimum ETH value if not provided
+    if (!params.filter_value_gte) {
+      defaultParams.filter_value_gte = DEFAULT_MIN_ETH_VALUE
+    }
     
-    // Add filter parameter to URL
-    defaultParams[key] = value
+    // Add all filters from options
+    for (const [key, value] of Object.entries(params)) {
+      // Skip null or undefined values
+      if (value === null || value === undefined) continue
+      
+      // Add filter parameter to URL
+      defaultParams[key] = value
+    }
+    
+    // Log basic info about the request (keeping some logging for debugging)
+    /* console.log(`Fetching transactions with filters:`, 
+      Object.keys(options).length > 0 ? options : 'No filters') */
+    
+    const response = await axios.get(baseUrl, { params: defaultParams })
+    const data = response.data
+    
+    // Log the activity
+    await logActivity({
+      type: 'FETCH_TRANSACTIONS',
+      params,
+      count: data.data?.length || 0
+    })
+    
+    return data
+  } catch (error) {
+    console.error('Error fetching transactions:', error)
+    await logActivity({
+      type: 'ERROR',
+      action: 'FETCH_TRANSACTIONS',
+      params,
+      error: error.message
+    })
+    throw error
   }
-  
-  // Log basic info about the request (keeping some logging for debugging)
-  /* console.log(`Fetching transactions with filters:`, 
-    Object.keys(options).length > 0 ? options : 'No filters') */
-  
-  const response = await axios.get(baseUrl, { params: defaultParams })
-  return response.data.data || [] 
 }
 
 // Process transactions before price movements (Step 2)
@@ -147,7 +168,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Found ${transactions.length} transactions before this price movement`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.map(tx => ({
+      const processedTxs = transactions.data.map(tx => ({
         ...tx,
         valueString: tx.value.toString(),
         priceMovementTimestamp: movementTimestamp,
@@ -217,7 +238,7 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Found ${transactions.length} transactions in this control period`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.map(tx => ({
+      const processedTxs = transactions.data.map(tx => ({
         ...tx,
         controlTimestamp: controlTimestamp,
         controlDateTime: control.date,
