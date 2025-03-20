@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename)
 // Constants
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
 const OUTPUT_DIR = path.join(__dirname, '../data')
-const MIN_ETH_VALUE = '100000000000000000000' // Minimum ETH value for transactions (100 ETH)
+const DEFAULT_MIN_ETH_VALUE = "100000000000000000000"
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')
@@ -71,28 +71,45 @@ function generateControlTimestamps(priceMovements, count) {
   return controlTimestamps
 }
 
-// Fetch transactions for a given time range
-async function fetchTransactions(startTimestamp, endTimestamp, options = {}) {
+/**
+ * Fetches transactions from ThirdWeb Insights API with flexible filtering options
+ * @param {Object} options - Filter options for the API query
+ * @returns {Array} Array of transaction objects
+ */
+async function fetchTransactions(options = {}) {
   try {
-    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&filter_block_timestamp_gte=${startTimestamp}&filter_block_timestamp_lte=${endTimestamp}&sort_by=block_number&sort_order=desc&filter_value_gte=${MIN_ETH_VALUE}&limit=200&clientId=${TW_CLIENT_ID}`
+    // Base URL with chain and client ID
+    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
     
-    
-    // Add optional filters
-    if (options.fromAddress) {
-      url += `&filter_from_address=${options.fromAddress}`
+    // Default parameters
+    url += `&sort_by=block_number&sort_order=desc&limit=200`
+
+    // Add filter for minimum ETH value if not provided
+    if (!options.filter_value_gte) {
+      url += `&filter_value_gte=${DEFAULT_MIN_ETH_VALUE}`
     }
-    if (options.toAddress) {
-      url += `&filter_to_address=${options.toAddress}`
+    
+    // Add all filters from options
+    for (const [key, value] of Object.entries(options)) {
+      // Skip null or undefined values
+      if (value === null || value === undefined) continue
+      
+      // Add filter parameter to URL
+      url += `&${key}=${value}`
     }
     
-    console.log(`Fetching transactions from ${new Date(startTimestamp * 1000).toISOString()} to ${new Date(endTimestamp * 1000).toISOString()}`)
-    if (options.fromAddress) console.log(`From address: ${options.fromAddress}`)
-    if (options.toAddress) console.log(`To address: ${options.toAddress}`)
+    // Log basic info about the request (keeping some logging for debugging)
+    /* console.log(`Fetching transactions with filters:`, 
+      Object.keys(options).length > 0 ? options : 'No filters') */
     
     const response = await axios.get(url)
-    return response.data.data || [] // Return empty array if data is undefined
+    return response.data.data || [] 
   } catch (error) {
-    console.error('Error fetching transactions:', error)
+    console.error('Error fetching transactions:', error.message)
+    if (error.response) {
+      console.error('Response data:', error.response.data)
+      console.error('Response status:', error.response.status)
+    }
     return [] // Return empty array on error
   }
 }
@@ -121,7 +138,13 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Processing price movement ${i+1}/${priceMovements.length} at ${movement.date}`)
       
       // Fetch transactions for the period before the price movement
-      const transactions = await fetchTransactions(startTimestamp, movementTimestamp)
+      const transactions = await fetchTransactions({
+        filter_block_timestamp_gte: startTimestamp,
+        filter_block_timestamp_lte: movementTimestamp,
+        sort_by: 'block_number',
+        sort_order: 'desc',
+        filter_value_gte: DEFAULT_MIN_ETH_VALUE
+      })
       console.log(`Found ${transactions.length} transactions before this price movement`)
       
       // Add to our collection with metadata
@@ -185,7 +208,13 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Processing control period ${i+1}/${controlTimestamps.length} at ${control.date}`)
       
       // Fetch transactions for the control period
-      const transactions = await fetchTransactions(startTimestamp, controlTimestamp)
+      const transactions = await fetchTransactions({
+        filter_block_timestamp_gte: startTimestamp,
+        filter_block_timestamp_lte: controlTimestamp,
+        sort_by: 'block_number',
+        sort_order: 'desc',
+        filter_value_gte: DEFAULT_MIN_ETH_VALUE
+      })
       console.log(`Found ${transactions.length} transactions in this control period`)
       
       // Add to our collection with metadata
