@@ -76,42 +76,44 @@ function generateControlTimestamps(priceMovements, count) {
  * @param {Object} options - Filter options for the API query
  * @returns {Array} Array of transaction objects
  */
-async function fetchTransactions(options = {}) {
-  try {
-    // Base URL with chain and client ID
-    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
-    
-    // Default parameters
-    url += `&sort_by=block_number&sort_order=desc&limit=200`
-
-    // Add filter for minimum ETH value if not provided
-    if (!options.filter_value_gte) {
-      url += `&filter_value_gte=${DEFAULT_MIN_ETH_VALUE}`
-    }
-    
-    // Add all filters from options
-    for (const [key, value] of Object.entries(options)) {
-      // Skip null or undefined values
-      if (value === null || value === undefined) continue
-      
-      // Add filter parameter to URL
-      url += `&${key}=${value}`
-    }
-    
-    // Log basic info about the request (keeping some logging for debugging)
-    /* console.log(`Fetching transactions with filters:`, 
-      Object.keys(options).length > 0 ? options : 'No filters') */
-    
-    const response = await axios.get(url)
-    return response.data.data || [] 
-  } catch (error) {
-    console.error('Error fetching transactions:', error.message)
-    if (error.response) {
-      console.error('Response data:', error.response.data)
-      console.error('Response status:', error.response.status)
-    }
-    return [] // Return empty array on error
+export async function fetchTransactions(params = {}) {
+  // Check for required environment variables and throw better errors
+  const clientId = process.env.TW_CLIENT_ID
+  if (!clientId) {
+    console.error('ERROR: Missing ThirdWeb Client ID in environment variables!')
+    console.error('Available env vars:', Object.keys(process.env))
+    throw new Error('Missing TW_CLIENT_ID in environment variables. Check Railway configuration.')
   }
+
+  const baseUrl = 'https://insight.thirdweb.com/v1/transactions'
+  const defaultParams = {
+    chain: '1',
+    sort_by: 'block_number',
+    sort_order: 'desc',
+    limit: '200',
+    clientId: clientId
+  }
+
+  // Add filter for minimum ETH value if not provided
+  if (!params.filter_value_gte) {
+    defaultParams.filter_value_gte = DEFAULT_MIN_ETH_VALUE
+  }
+  
+  // Add all filters from options
+  for (const [key, value] of Object.entries(params)) {
+    // Skip null or undefined values
+    if (value === null || value === undefined) continue
+    
+    // Add filter parameter to URL
+    defaultParams[key] = value
+  }
+  
+  // Log basic info about the request (keeping some logging for debugging)
+  /* console.log(`Fetching transactions with filters:`, 
+    Object.keys(options).length > 0 ? options : 'No filters') */
+  
+  const response = await axios.get(baseUrl, { params: defaultParams })
+  return response.data.data || [] 
 }
 
 // Process transactions before price movements (Step 2)
