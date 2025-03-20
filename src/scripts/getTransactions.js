@@ -3,10 +3,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import axios from 'axios'
-import { logActivity } from '../lib/mongodb.js'
-
-// Initialize dotenv before any env vars are accessed
-dotenv.config()
 
 /* 
 
@@ -21,6 +17,9 @@ dotenv.config()
 
 */
 
+// Initialize dotenv
+dotenv.config()
+
 // Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -28,7 +27,7 @@ const __dirname = path.dirname(__filename)
 // Constants
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
 const OUTPUT_DIR = path.join(__dirname, '../data')
-const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
+const DEFAULT_MIN_ETH_VALUE = "100000000000000000000"
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')
@@ -77,60 +76,41 @@ function generateControlTimestamps(priceMovements, count) {
  * @param {Object} options - Filter options for the API query
  * @returns {Array} Array of transaction objects
  */
-async function fetchTransactions(params = {}) {
+async function fetchTransactions(options = {}) {
   try {
-    // Use the already checked TW_CLIENT_ID from above
-    if (!TW_CLIENT_ID) {
-      throw new Error('TW_CLIENT_ID was not found. This should have been caught earlier.')
-    }
-
-    const baseUrl = 'https://insight.thirdweb.com/v1/transactions'
-    const defaultParams = {
-      chain: '1',
-      sort_by: 'block_number',
-      sort_order: 'desc',
-      limit: '200',
-      clientId: TW_CLIENT_ID
-    }
+    // Base URL with chain and client ID
+    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
+    
+    // Default parameters
+    url += `&sort_by=block_number&sort_order=desc&limit=200`
 
     // Add filter for minimum ETH value if not provided
-    if (!params.filter_value_gte) {
-      defaultParams.filter_value_gte = DEFAULT_MIN_ETH_VALUE
+    if (!options.filter_value_gte) {
+      url += `&filter_value_gte=${DEFAULT_MIN_ETH_VALUE}`
     }
     
     // Add all filters from options
-    for (const [key, value] of Object.entries(params)) {
+    for (const [key, value] of Object.entries(options)) {
       // Skip null or undefined values
       if (value === null || value === undefined) continue
       
       // Add filter parameter to URL
-      defaultParams[key] = value
+      url += `&${key}=${value}`
     }
     
     // Log basic info about the request (keeping some logging for debugging)
     /* console.log(`Fetching transactions with filters:`, 
       Object.keys(options).length > 0 ? options : 'No filters') */
     
-    const response = await axios.get(baseUrl, { params: defaultParams })
-    const data = response.data
-    
-    // Log the activity
-    await logActivity({
-      type: 'FETCH_TRANSACTIONS',
-      params,
-      count: data.data?.length || 0
-    })
-    
-    return data
+    const response = await axios.get(url)
+    return response.data.data || [] 
   } catch (error) {
-    console.error('Error fetching transactions:', error)
-    await logActivity({
-      type: 'ERROR',
-      action: 'FETCH_TRANSACTIONS',
-      params,
-      error: error.message
-    })
-    throw error
+    console.error('Error fetching transactions:', error.message)
+    if (error.response) {
+      console.error('Response data:', error.response.data)
+      console.error('Response status:', error.response.status)
+    }
+    return [] // Return empty array on error
   }
 }
 
@@ -168,7 +148,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Found ${transactions.length} transactions before this price movement`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.data.map(tx => ({
+      const processedTxs = transactions.map(tx => ({
         ...tx,
         valueString: tx.value.toString(),
         priceMovementTimestamp: movementTimestamp,
@@ -238,7 +218,7 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Found ${transactions.length} transactions in this control period`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.data.map(tx => ({
+      const processedTxs = transactions.map(tx => ({
         ...tx,
         controlTimestamp: controlTimestamp,
         controlDateTime: control.date,
