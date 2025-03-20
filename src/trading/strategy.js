@@ -1,5 +1,5 @@
 import { getDbClient } from '../lib/mongodb.js'
-import { placeOrder, getMarketPrice } from './kraken.js'
+import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
 
 /**
@@ -95,7 +95,7 @@ export async function executeTradeStrategy() {
     
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour}`)
-    const orderResult = await placeOrder(direction, 0.1) // 0.1 ETH position size
+    const orderResult = await placeOrder(direction, 0.001) // 0.1 ETH position size
     
     // Record the signal and order in the database
     await db.collection('trading_signals').insertOne({
