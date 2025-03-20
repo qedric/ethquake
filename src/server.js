@@ -11,6 +11,7 @@ dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 8080
+let server = null
 
 // Basic health check endpoint for Railway
 app.get('/', (req, res) => {
@@ -30,7 +31,6 @@ process.on('uncaughtException', (error) => {
     error: error.message,
     stack: error.stack
   }).catch(err => console.error('Failed to log uncaught exception:', err))
-  // Don't exit the process - let it keep running
 })
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -41,6 +41,37 @@ process.on('unhandledRejection', (reason, promise) => {
   }).catch(err => console.error('Failed to log unhandled rejection:', err))
 })
 
+// Handle shutdown gracefully
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully')
+  
+  try {
+    await logActivity({
+      type: 'SERVER_SHUTDOWN',
+      reason: 'SIGTERM received'
+    })
+    
+    // Close the server
+    if (server) {
+      server.close(() => {
+        console.log('Server closed')
+        process.exit(0)
+      })
+    } else {
+      process.exit(0)
+    }
+    
+    // Force exit after 5 seconds if not closed gracefully
+    setTimeout(() => {
+      console.log('Forcing shutdown after timeout')
+      process.exit(1)
+    }, 5000)
+  } catch (error) {
+    console.error('Error during shutdown:', error)
+    process.exit(1)
+  }
+})
+
 // Keep the process alive with proper initialization
 async function startServer() {
   try {
@@ -48,7 +79,7 @@ async function startServer() {
     await connectToDatabase()
     
     // Start Express server
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`EthQuake Trading Server running on port ${PORT}. Not that you'll ever look at it.`)
       logActivity({
         type: 'SERVER_START',
@@ -64,10 +95,10 @@ async function startServer() {
 
 startServer()
 
-// Add this to make sure the process doesn't exit
+// Heartbeat for logs but not too frequent
 setInterval(() => {
   console.log('Server heartbeat check')
-}, 60000)
+}, 300000) // 5 minutes instead of 1 minute
 
 // Status endpoint - might be useful someday, who knows
 app.get('/status', async (req, res) => {
