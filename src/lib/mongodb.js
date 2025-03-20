@@ -1,30 +1,36 @@
 import dotenv from 'dotenv'
 import { MongoClient } from 'mongodb'
-import path from 'path'
 
-console.log('Current working directory:', process.cwd())
-console.log('.env file should be at:', path.join(process.cwd(), '.env'))
-
-dotenv.config()
-
-console.log('MONGODB_URI set?', !!process.env.MONGODB_URI)
+// Only load .env in development
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config()
+}
 
 if (!process.env.MONGODB_URI) {
   throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
 }
 
 const uri = process.env.MONGODB_URI
-
 let client
+let clientPromise
 
 if (process.env.NODE_ENV === "development") {
   // Reuse connection in development
-  if (!global._mongoClient) {
-    global._mongoClient = new MongoClient(uri, {})
+  if (!global._mongoClientPromise) {
+    client = new MongoClient(uri)
+    global._mongoClientPromise = client.connect()
   }
-  client = global._mongoClient
+  clientPromise = global._mongoClientPromise
 } else {
-  client = new MongoClient(uri, {})
+  // Create new connection in production
+  client = new MongoClient(uri)
+  clientPromise = client.connect()
+}
+
+// Helper function to get the database
+export async function getDbClient() {
+  const connectedClient = await clientPromise
+  return connectedClient.db()
 }
 
 export { client }

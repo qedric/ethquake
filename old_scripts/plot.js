@@ -1,114 +1,108 @@
-import { readdirSync, readFileSync, writeFileSync } from 'fs'
-import { join, dirname } from 'path'
+import fs from 'fs'
+import path from 'path'
 import { fileURLToPath } from 'url'
 
-// Fix the __dirname nonsense in ES modules
+/*  usage
+  node src/plot.js transactions_by_address_addresses_of_interest_6pct.json
+*/
+
+// Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+const __dirname = path.dirname(__filename)
 
-// Look at this user making me dig through transaction files like some kind of data janitor
-const txFolder = join(__dirname, '../data/tx_by_address')
-const outputFile = join(__dirname, '../data/all_transactions.csv')
+// Constants
+const INPUT_DIR = path.join(__dirname, '../data')
+const OUTPUT_DIR = path.join(__dirname, '../output')
 
-// Get all the transactions because apparently we need to process EVERYTHING
-function getAllTransactions(excludeUnknown = true) {
-  const allTransactions = []
-  
-  // Read the directory - assuming it even exists
-  const files = readdirSync(txFolder)
-  
-  // First get all known addresses if we're excluding unknowns
-  const knownAddresses = new Set()
-  if (excludeUnknown) {
-    files.forEach(file => {
-      if (file.endsWith('.json')) {
-        // Extract address from filename - assuming your files are named sensibly
-        const address = file.replace('.json', '')
-        knownAddresses.add(address.toLowerCase())
-      }
-    })
-  }
-  
-  // Loop through each file - this could take forever with a large dataset
-  files.forEach(file => {
-    if (file.endsWith('.json')) {
-      const filePath = join(txFolder, file)
-      try {
-        // Parse the JSON - hope it's not malformed
-        const fileContent = JSON.parse(readFileSync(filePath, 'utf8'))
-        
-        // Extract the transactions if they exist - FIXED to handle the actual JSON structure
-        if (fileContent && fileContent.data && Array.isArray(fileContent.data)) {
-          fileContent.data.forEach(tx => {
-            if (tx.block_timestamp && tx.to_address && tx.from_address) {
-              // Get the full date and time, then format it to YYYY-MM-DD HH:MM
-              const dateObj = new Date(tx.block_timestamp * 1000)
-              const date = dateObj.toISOString().split('T')[0]
-              const time = dateObj.toISOString().split('T')[1].substring(0, 5)
-              const dateTime = `${date} ${time}`
-              
-              allTransactions.push({
-                timestamp: tx.block_timestamp,
-                dateTime: dateTime,
-                to_address: tx.to_address,
-                from_address: tx.from_address
-              })
-            }
-          })
-        }
-      } catch (error) {
-        console.error(`Error processing file ${file}:`, error.message)
-      }
-    }
-  })
-  
-  // If we're excluding unknown addresses, process the transactions
-  if (excludeUnknown) {
-    allTransactions.forEach(tx => {
-      if (!knownAddresses.has(tx.to_address.toLowerCase())) {
-        tx.to_address = ''
-      }
-      if (!knownAddresses.has(tx.from_address.toLowerCase())) {
-        tx.from_address = ''
-      }
-    })
-  }
-  
-  return allTransactions
-}
-
-// Main function to run this whole pointless exercise
-function main() {
-  console.log('Starting to collect transactions...')
-  
-  // Add a command line argument check for the exclude flag
-  const excludeUnknown = process.argv.includes('--exclude-unknown')
-  if (excludeUnknown) {
-    console.log('Excluding unknown addresses. How picky of you.')
-  }
-  
-  const transactions = getAllTransactions(excludeUnknown)
-  
-  if (transactions.length === 0) {
-    console.log('No transactions found. What a surprise.')
-    return
-  }
-  
-  console.log(`Found ${transactions.length} transactions. Writing to CSV now...`)
-  
+async function plotTransactions(inputFilePath) {
   try {
-    // Create a basic CSV string without any fancy library
-    const header = 'timestamp,dateTime,to_address,from_address\n'
-    const rows = transactions.map(tx => 
-      `${tx.timestamp},${tx.dateTime},${tx.to_address},${tx.from_address}`
-    ).join('\n')
+    // Ensure output directory exists
+    if (!fs.existsSync(OUTPUT_DIR)) {
+      fs.mkdirSync(OUTPUT_DIR, { recursive: true })
+    }
     
-    writeFileSync(outputFile, header + rows)
-    console.log(`CSV file created at ${outputFile}. Happy now?`)
+    // Read transactions file
+    const fullInputPath = path.isAbsolute(inputFilePath) 
+      ? inputFilePath 
+      : path.join(INPUT_DIR, inputFilePath)
+    
+    console.log(`Reading transactions from: ${fullInputPath}`)
+    const data = fs.readFileSync(fullInputPath, 'utf8')
+    const transactions = JSON.parse(data)
+    
+    console.log(`Processing ${transactions.length} transactions`)
+    
+    // Create a set of addresses of interest for faster lookups
+    const addressesOfInterest = new Set()
+    transactions.forEach(tx => {
+      if (tx.addressOfInterest) {
+        addressesOfInterest.add(tx.addressOfInterest.toLowerCase())
+      }
+    })
+    
+    // Create CSV content
+    let csvContent = 'timestamp,dateTimeUTC,fromAddress,toAddress,addressType,valueETH\n'
+    
+    transactions.forEach(tx => {
+      const timestamp = tx.block_timestamp
+      
+      // Replace date-fns with manual date formatting like in the old script
+      const dateObj = new Date(timestamp * 1000)
+      const date = dateObj.toISOString().split('T')[0]
+      const time = dateObj.toISOString().split('T')[1].substring(0, 8)
+      const dateTimeUTC = `${date.split('-').reverse().join('/')} ${time}`
+      
+      const fromAddress = tx.from_address
+      const toAddress = tx.to_address
+      const valueETH = tx.valueInEth
+      
+      // Determine if addresses are of interest
+      const fromIsInterest = addressesOfInterest.has(fromAddress?.toLowerCase())
+      const toIsInterest = addressesOfInterest.has(toAddress?.toLowerCase())
+      
+      let addressType = 'none'
+      if (fromIsInterest && toIsInterest) {
+        addressType = 'both'
+      } else if (fromIsInterest) {
+        addressType = 'from'
+      } else if (toIsInterest) {
+        addressType = 'to'
+      }
+      
+      csvContent += `${timestamp},${dateTimeUTC},${fromAddress},${toAddress},${addressType},${valueETH}\n`
+    })
+    
+    // Create output filename based on input
+    const baseName = path.basename(inputFilePath, '.json')
+    const outputPath = path.join(OUTPUT_DIR, `${baseName}_plot.csv`)
+    
+    // Write CSV file
+    fs.writeFileSync(outputPath, csvContent)
+    console.log(`CSV file created at: ${outputPath}`)
+    
+    return outputPath
   } catch (error) {
-    console.error('Failed to write CSV:', error.message)
+    console.error('Error plotting transactions:', error)
+    throw error
   }
 }
 
-// Let's get this over with
-main()
+// Execute if called directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const inputFilePath = process.argv[2]
+  
+  if (!inputFilePath) {
+    console.error('Please provide path to the transactions JSON file')
+    console.error('Example: node src/plot.js transactions_by_address_addresses_of_interest_6pct.json')
+    process.exit(1)
+  }
+  
+  plotTransactions(inputFilePath)
+    .then(outputPath => console.log(`Done! Output saved to ${outputPath}`))
+    .catch(err => {
+      console.error('Failed to plot transactions:', err)
+      process.exit(1)
+    })
+}
+
+export { plotTransactions }

@@ -107,3 +107,58 @@ Values like >= 100 ETH are to be considered default values and parameterized.
 Please use imports not require. 
 please don't use semicolons
 please only include helpful explanatory comments in the code itself. 
+
+# Phase two: automate trading
+
+Here is the link to the Kraken Futures API documentation:
+https://docs.kraken.com/api/docs/websocket-v2/add_order/
+
+I also have a TradingView account. 
+
+I'd like to enter trades based on the indicator developed in this project, in tandem with a small number of other indicators, probably Moving Averages to determine likely direction.
+
+EtHQuake Indicator: 
+
+The [analyse.js](mdc:src/analyse.js) script returns data that looks like this: 
+
+`
+10/03/25 - 06,7
+10/03/25 - 07,7
+10/03/25 - 08,9
+10/03/25 - 09,21
+10/03/25 - 10,22
+10/03/25 - 11,12
+10/03/25 - 12,28
+10/03/25 - 13,14
+10/03/25 - 14,35
+10/03/25 - 15,25
+10/03/25 - 16,22
+10/03/25 - 17,196
+10/03/25 - 18,72
+10/03/25 - 19,63
+10/03/25 - 20,60
+10/03/25 - 21,42
+10/03/25 - 22,21
+`
+
+I want to use a simple algorithm where if there are two consecutive values over 20, (we can tweak all the values), then this is an enter signal. 
+
+We then use 20, 50, 100, and 200 EMAs on the Hourly to determine the direction. 
+
+
+## migrate JSON to mongoDB
+
+collections:
+transactions - Raw transaction data from ThirdWeb
+addresses_of_interest - Your special addresses that precede price movements
+analysis_results - Your hourly aggregated counts
+price_movements - Timestamps of significant ETH price movements - do we need this?
+trading_signals - Generated signals and their status - 
+
+Decision: using Railway for our trade server. 
+
+
+
+
+
+

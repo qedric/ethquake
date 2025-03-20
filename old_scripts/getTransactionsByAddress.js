@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import { fetchTransactions } from './getTransactions.js'
+import { fetchTransactions } from '../src/scripts/getTransactions.js'
 
 /* 
     For step 5: Get all transactions for addresses of interest
