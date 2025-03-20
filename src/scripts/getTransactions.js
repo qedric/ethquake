@@ -76,7 +76,7 @@ function generateControlTimestamps(priceMovements, count) {
  * @param {Object} options - Filter options for the API query
  * @returns {Array} Array of transaction objects
  */
-export async function fetchTransactions(params = {}) {
+async function fetchTransactions(params = {}) {
   // Check for required environment variables and throw better errors
   const clientId = process.env.TW_CLIENT_ID
   if (!clientId) {
