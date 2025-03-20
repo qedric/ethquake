@@ -7,6 +7,13 @@ import axios from 'axios'
 // Initialize dotenv FIRST before any env vars are accessed
 dotenv.config()
 
+// Extra debug logging for Railway issues
+console.log('ENVIRONMENT DEBUG:')
+console.log('All env vars:', Object.keys(process.env).join(', '))
+console.log('Env vars starting with TW:', Object.keys(process.env).filter(key => key.startsWith('TW')))
+console.log('Env vars starting with tw:', Object.keys(process.env).filter(key => key.startsWith('tw')))
+console.log('Full env dump (partial):', JSON.stringify(process.env).substring(0, 500))
+
 /* 
 
     For step 2 (transactions before price movements):
@@ -25,16 +32,20 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Constants
-const TW_CLIENT_ID = process.env.TW_CLIENT_ID
+const TW_CLIENT_ID = process.env.TW_CLIENT_ID || process.env.tw_client_id || process.env.TWCLIENTID || process.env.twClientId
 const OUTPUT_DIR = path.join(__dirname, '../data')
 const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
 
 // Add more debugging to help troubleshoot Railway issues
-console.log('Environment check: Available env vars:', Object.keys(process.env))
-console.log('TW_CLIENT_ID availability:', TW_CLIENT_ID ? 'Found' : 'Missing')
+console.log('TW_CLIENT_ID resolution attempts:')
+console.log('- process.env.TW_CLIENT_ID:', process.env.TW_CLIENT_ID ? 'Found' : 'Missing')
+console.log('- process.env.tw_client_id:', process.env.tw_client_id ? 'Found' : 'Missing')
+console.log('- process.env.TWCLIENTID:', process.env.TWCLIENTID ? 'Found' : 'Missing')
+console.log('- process.env.twClientId:', process.env.twClientId ? 'Found' : 'Missing')
+console.log('- Final TW_CLIENT_ID:', TW_CLIENT_ID ? 'Found' : 'Missing')
 
 if (!TW_CLIENT_ID) {
-  console.error('Missing TW_CLIENT_ID in environment variables')
+  console.error('Missing TW_CLIENT_ID in environment variables. Check Railway configuration!')
   process.exit(1)
 }
 
