@@ -1,14 +1,8 @@
-import { getDbClient } from '../lib/mongodb.js'
+import { getDb } from '../lib/mongodb.js'
 import dotenv from 'dotenv'
-import path from 'path'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
 
 // Load env vars because apparently we need to do this in every file
 dotenv.config()
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 /**
  * Analyzes transaction data from MongoDB to identify patterns in address activity
@@ -18,7 +12,7 @@ async function analyzeTransactions() {
   console.log('Starting transaction analysis from MongoDB...')
   
   // Get MongoDB connection - hopefully it works this time
-  const db = await getDbClient()
+  const db = await getDb()
   let client = db.client // For closing connection later
   
   try {
@@ -65,16 +59,7 @@ async function analyzeTransactions() {
       return `${formattedDate} - ${r._id.hour},${r.count}`
     }).join('\n')
     
-    // Save to file because apparently CSV is still a thing
-    const outputDir = path.join(__dirname, '..', '..', 'data', 'analysis')
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true })
-    }
-    
-    const outputFile = path.join(outputDir, `hourly_analysis_${new Date().toISOString().slice(0,10)}.csv`)
-    fs.writeFileSync(outputFile, output)
-    
-    console.log(`Analysis complete. Results saved to ${outputFile}`)
+    console.log('Analysis complete.')
     console.log('\nHourly transaction counts:')
     console.log(output)
     
