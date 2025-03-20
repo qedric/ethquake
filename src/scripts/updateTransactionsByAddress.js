@@ -1,8 +1,6 @@
-import path from 'path'
-import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import { fetchTransactions } from './getTransactions.js'
-import { getDbClient } from '../lib/mongodb.js'
+import { getDb } from '../lib/mongodb.js'
 
 /**
  * Updates transactions for addresses of interest by fetching new ones since the latest block in the existing data.
@@ -51,7 +49,7 @@ const WEI_TO_ETH = 1e18
  */
 async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN_ETH, startBlockNumber = null) {
   // Get MongoDB connection
-  const db = await getDbClient()
+  const db = await getDb()
   
   // Load existing transaction data from MongoDB
   console.log('Reading existing transaction data from MongoDB...')
@@ -209,7 +207,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
 
 async function saveTransactionsToMongo(transactions, collectionName = 'transactions') {
   try {
-    const db = await getDbClient()
+    const db = await getDb()
     const collection = db.collection(collectionName)
     
     // Create a bulk operation
@@ -247,7 +245,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   
   let client // Store the MongoDB client for closing
   
-  getDbClient()
+  getDb()
     .then(db => {
       // Store reference to client for later closing
       client = db.client
