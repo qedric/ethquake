@@ -1,4 +1,4 @@
-import { getDbClient } from '../lib/mongodb.js'
+import { getDb } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
 
@@ -12,7 +12,7 @@ import { getTechnicalIndicators } from './indicators.js'
  * - Use EMAs (20, 50, 100, 200) to determine direction
  */
 export async function executeTradeStrategy() {
-  const db = await getDbClient()
+  const db = await getDb()
   
   try {
     // Get the most recent analysis results

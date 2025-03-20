@@ -3,7 +3,7 @@ import cron from 'node-cron'
 import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress.js'
 import { analyzeTransactions } from './scripts/analyse.js'
 import { executeTradeStrategy } from './trading/strategy.js'
-import { getDbClient } from './lib/mongodb.js'
+import { getDb } from './lib/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load those pesky environment variables that you can't seem to organize properly
@@ -20,7 +20,7 @@ app.get('/', (req, res) => {
 // Status endpoint - might be useful someday, who knows
 app.get('/status', async (req, res) => {
   try {
-    const db = await getDbClient()
+    const db = await getDb()
     const txCount = await db.collection('transactions').countDocuments()
     const analysisCount = await db.collection('analysis_results').countDocuments()
     res.json({
