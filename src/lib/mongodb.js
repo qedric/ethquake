@@ -6,11 +6,11 @@ if (process.env.NODE_ENV !== 'production') {
   dotenv.config()
 }
 
-if (!process.env.MONGO_URI) {
-  throw new Error('Invalid/Missing environment variable: "MONGO_URI"')
+if (!process.env.MONGODB_URI) {
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"')
 }
 
-const uri = process.env.MONGO_URI || 'mongodb://localhost:27017'
+const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017'
 const dbName = process.env.MONGO_DB_NAME || 'ethquake'
 
 let client = null
