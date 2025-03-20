@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
 import axios from 'axios'
 
+// Initialize dotenv FIRST before any env vars are accessed
+dotenv.config()
+
 /* 
 
     For step 2 (transactions before price movements):
@@ -17,9 +20,6 @@ import axios from 'axios'
 
 */
 
-// Initialize dotenv
-dotenv.config()
-
 // Get directory name in ESM
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -28,6 +28,10 @@ const __dirname = path.dirname(__filename)
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
 const OUTPUT_DIR = path.join(__dirname, '../data')
 const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
+
+// Add more debugging to help troubleshoot Railway issues
+console.log('Environment check: Available env vars:', Object.keys(process.env))
+console.log('TW_CLIENT_ID availability:', TW_CLIENT_ID ? 'Found' : 'Missing')
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')
@@ -77,12 +81,9 @@ function generateControlTimestamps(priceMovements, count) {
  * @returns {Array} Array of transaction objects
  */
 async function fetchTransactions(params = {}) {
-  // Check for required environment variables and throw better errors
-  const clientId = process.env.TW_CLIENT_ID
-  if (!clientId) {
-    console.error('ERROR: Missing ThirdWeb Client ID in environment variables!')
-    console.error('Available env vars:', Object.keys(process.env))
-    throw new Error('Missing TW_CLIENT_ID in environment variables. Check Railway configuration.')
+  // Use the already checked TW_CLIENT_ID from above
+  if (!TW_CLIENT_ID) {
+    throw new Error('TW_CLIENT_ID was not found. This should have been caught earlier.')
   }
 
   const baseUrl = 'https://insight.thirdweb.com/v1/transactions'
@@ -91,7 +92,7 @@ async function fetchTransactions(params = {}) {
     sort_by: 'block_number',
     sort_order: 'desc',
     limit: '200',
-    clientId: clientId
+    clientId: TW_CLIENT_ID
   }
 
   // Add filter for minimum ETH value if not provided
