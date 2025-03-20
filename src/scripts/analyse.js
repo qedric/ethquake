@@ -35,17 +35,17 @@ async function analyzeTransactions() {
       }},
       // Add fields for date parts - using formats that actually work with MongoDB
       { $addFields: {
-        fullDate: { $dateToString: { format: "%d/%m/%Y", date: "$block_datetime" } },
-        hour: { $dateToString: { format: "%H", date: "$block_datetime" } }
+        fullDate: { $dateToString: { format: '%d/%m/%Y', date: '$block_datetime' } },
+        hour: { $dateToString: { format: '%H', date: '$block_datetime' } }
       }},
       // Group by date and hour
       { $group: {
-        _id: { fullDate: "$fullDate", hour: "$hour" },
+        _id: { fullDate: '$fullDate', hour: '$hour' },
         count: { $sum: 1 },
-        transactions: { $push: "$$ROOT" }
+        transactions: { $push: '$$ROOT' }
       }},
       // Sort by date and hour
-      { $sort: { "_id.fullDate": 1, "_id.hour": 1 } }
+      { $sort: { '_id.fullDate': 1, '_id.hour': 1 } }
     ]
     
     const results = await db.collection('transactions').aggregate(pipeline).toArray()

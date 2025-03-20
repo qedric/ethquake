@@ -14,7 +14,7 @@ const uri = process.env.MONGODB_URI
 let client
 let clientPromise
 
-if (process.env.NODE_ENV === "development") {
+if (process.env.NODE_ENV === 'development') {
   // Reuse connection in development
   if (!global._mongoClientPromise) {
     client = new MongoClient(uri)
@@ -27,10 +27,25 @@ if (process.env.NODE_ENV === "development") {
   clientPromise = client.connect()
 }
 
-// Helper function to get the database
+// Instead of using global, use a module-level variable
+let cachedClient = null
+let cachedDb = null
+
 export async function getDbClient() {
-  const connectedClient = await clientPromise
-  return connectedClient.db()
+  if (cachedClient) {
+    return { client: cachedClient, db: cachedDb }
+  }
+
+  // Connect to MongoDB
+  const client = new MongoClient(process.env.MONGODB_URI)
+  await client.connect()
+  const db = client.db('ethquake')
+  
+  // Cache the connection
+  cachedClient = client
+  cachedDb = db
+  
+  return { client, db }
 }
 
 export { client }

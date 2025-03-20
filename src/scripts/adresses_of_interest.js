@@ -49,7 +49,7 @@ const identifyAddressesOfInterest = (
   const controlTransactions = loadTransactionData(path.resolve(controlFilePath))
   
   if (!targetTransactions.data || !controlTransactions.data) {
-    console.error("Missing transaction data. Make sure your data files exist.")
+    console.error('Missing transaction data. Make sure your data files exist.')
     return
   }
   

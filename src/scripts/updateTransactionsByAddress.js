@@ -39,7 +39,6 @@ import { getDbClient } from '../lib/mongodb.js'
 // Loading env vars because for some reason we still can't organize config properly
 dotenv.config()
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_MIN_ETH = 100
 const WEI_TO_ETH = 1e18
 
@@ -55,7 +54,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
   const db = await getDbClient()
   
   // Load existing transaction data from MongoDB
-  console.log(`Reading existing transaction data from MongoDB...`)
+  console.log('Reading existing transaction data from MongoDB...')
   let existingTransactions = []
   
   try {
@@ -199,7 +198,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
     const newUniqueTxs = newTransactions.filter(tx => !existingTransactions.some(e => e.hash === tx.hash))
     await saveTransactionsToMongo(newUniqueTxs)
   } else {
-    console.log("No new transactions to save.")
+    console.log('No new transactions to save.')
   }
   
   return {

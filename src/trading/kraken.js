@@ -9,7 +9,7 @@ const API_KEY = process.env.KRAKEN_API_KEY
 const API_SECRET = process.env.KRAKEN_API_SECRET
 
 // Kraken WebSocket API URL for futures
-const WS_URL = 'wss://futures.kraken.com/ws/v2'
+//const WS_URL = 'wss://futures.kraken.com/ws/v2'
 const REST_URL = 'https://futures.kraken.com/derivatives/api/v3'
 
 /**
