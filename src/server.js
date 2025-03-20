@@ -3,19 +3,71 @@ import cron from 'node-cron'
 import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress.js'
 import { analyzeTransactions } from './scripts/analyse.js'
 import { executeTradeStrategy } from './trading/strategy.js'
-import { getDb } from './lib/mongodb.js'
+import { getDb, connectToDatabase, logActivity } from './lib/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 8080
 
-// Basic health check endpoint so Railway knows the server is alive
+// Basic health check endpoint for Railway
 app.get('/', (req, res) => {
-  res.send('EthQuake Trading Server is running... unfortunately')
+  res.send('EthQuake Trading Server is running. Go away.')
 })
+
+// Add a proper health check endpoint that Railway can use
+app.get('/health', (req, res) => {
+  res.status(200).send({ status: 'ok' })
+})
+
+// Proper error handling to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error)
+  logActivity({
+    type: 'UNCAUGHT_EXCEPTION',
+    error: error.message,
+    stack: error.stack
+  }).catch(err => console.error('Failed to log uncaught exception:', err))
+  // Don't exit the process - let it keep running
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+  logActivity({
+    type: 'UNHANDLED_REJECTION',
+    reason: reason?.message || String(reason)
+  }).catch(err => console.error('Failed to log unhandled rejection:', err))
+})
+
+// Keep the process alive with proper initialization
+async function startServer() {
+  try {
+    // Connect to MongoDB first
+    await connectToDatabase()
+    
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`EthQuake Trading Server running on port ${PORT}. Not that you'll ever look at it.`)
+      logActivity({
+        type: 'SERVER_START',
+        port: PORT
+      }).catch(err => console.error('Failed to log server start:', err))
+    })
+  } catch (error) {
+    console.error('Failed to start server:', error)
+    // Important: Don't exit on startup error, retry instead
+    setTimeout(startServer, 5000)
+  }
+}
+
+startServer()
+
+// Add this to make sure the process doesn't exit
+setInterval(() => {
+  console.log('Server heartbeat check')
+}, 60000)
 
 // Status endpoint - might be useful someday, who knows
 app.get('/status', async (req, res) => {
@@ -57,9 +109,4 @@ cron.schedule('*/15 * * * *', async () => {
   } catch (error) {
     console.error('Error in scheduled task:', error)
   }
-})
-
-// Start the server
-app.listen(PORT, () => {
-  console.log(`EthQuake Trading Server running on port ${PORT}. Not that you'll ever look at it.`)
 }) 
