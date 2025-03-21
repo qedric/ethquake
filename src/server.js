@@ -15,7 +15,7 @@ let server = null
 
 // Basic health check endpoint for Railway
 app.get('/', (req, res) => {
-  res.send('EthQuake Trading Server is running. Go away.')
+  res.send('Ethquake Server is running. Go away.')
 })
 
 // Add a proper health check endpoint that Railway can use
