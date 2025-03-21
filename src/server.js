@@ -10,6 +10,7 @@ import visualizationRouter from './api/visualizationRouter.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { sessionMiddleware, basicAuthMiddleware, sessionAuthMiddleware, apiKeyMiddleware } from './middleware/auth.js'
+import cors from 'cors'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -67,13 +68,19 @@ async function startServer() {
     // Connect to MongoDB first
     await connectToDatabase()
     
-    // Add session middleware
+    // Configure CORS to allow credentials
+    app.use(cors({
+      origin: true,  // Allow any origin with credentials
+      credentials: true  // Allow cookies to be sent
+    }))
+    
+    // Add session middleware BEFORE route handlers
     app.use(sessionMiddleware)
     
     // Add static files
     app.use(express.static(path.join(__dirname, 'public')))
     
-    // Protected HTML route
+    // Protected HTML route with Basic Auth
     app.use('/charts', basicAuthMiddleware, visualizationRouter)
     
     // API routes for chart data - protected by session auth
