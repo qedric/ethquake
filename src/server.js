@@ -5,6 +5,7 @@ import { countTransactionsByHour } from './scripts/txCountByHour.js'
 import { executeTradeStrategy } from './trading/strategy.js'
 import { getDb, connectToDatabase, logActivity } from './lib/mongodb.js'
 import dotenv from 'dotenv'
+import transactionDataRouter from './api/transactionData.js'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -66,6 +67,9 @@ async function startServer() {
         port: PORT
       }).catch(err => console.error('Failed to log server start:', err))
     })
+
+    // Add the router
+    app.use('/api/transactions', transactionDataRouter)
   } catch (error) {
     console.error('Failed to start server:', error)
     // Important: Don't exit on startup error, retry instead
