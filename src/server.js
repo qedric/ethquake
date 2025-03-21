@@ -9,7 +9,7 @@ import transactionDataRouter from './api/transactionData.js'
 import visualizationRouter from './api/visualizationRouter.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { sessionMiddleware, basicAuthMiddleware, sessionAuthMiddleware, apiKeyMiddleware } from './middleware/auth.js'
+import { basicAuthMiddleware, sessionAuthMiddleware, apiKeyMiddleware } from './middleware/auth.js'
 import cors from 'cors'
 
 // Load those pesky environment variables that you can't seem to organize properly
