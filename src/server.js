@@ -41,35 +41,15 @@ process.on('unhandledRejection', (reason, promise) => {
   }).catch(err => console.error('Failed to log unhandled rejection:', err))
 })
 
-// Handle shutdown gracefully
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully')
-  
-  try {
-    await logActivity({
-      type: 'SERVER_SHUTDOWN',
-      reason: 'SIGTERM received'
-    })
-    
-    // Close the server
-    if (server) {
-      server.close(() => {
-        console.log('Server closed')
-        process.exit(0)
-      })
-    } else {
-      process.exit(0)
-    }
-    
-    // Force exit after 5 seconds if not closed gracefully
-    setTimeout(() => {
-      console.log('Forcing shutdown after timeout')
-      process.exit(1)
-    }, 5000)
-  } catch (error) {
-    console.error('Error during shutdown:', error)
-    process.exit(1)
-  }
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server')
+  server.close(() => {
+    console.log('HTTP server closed')
+    // Close database connection if needed
+    // disconnectFromDatabase()
+    process.exit(0)
+  })
 })
 
 // Keep the process alive with proper initialization

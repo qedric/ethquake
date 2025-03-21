@@ -14,21 +14,35 @@ import { getTechnicalIndicators } from './indicators.js'
 export async function executeTradeStrategy() {
   try {
     // First try to get the database
-    let db
-    try {
-      db = await getDb()
-    } catch (error) {
-      console.log('attempting reconnect - ', error)
-      // Try to reconnect because that's just what we do now
-      await connectToDatabase()
-      db = await getDb()
+    let db = null
+    let connectionAttempts = 0
+    const MAX_ATTEMPTS = 3
+    
+    while (!db && connectionAttempts < MAX_ATTEMPTS) {
+      try {
+        connectionAttempts++
+        await connectToDatabase() // Always reconnect first
+        db = await getDb()
+      } catch (error) {
+        console.log(`Database connection attempt ${connectionAttempts} failed - ${error.message}`)
+        if (connectionAttempts >= MAX_ATTEMPTS) {
+          throw new Error(`Failed to connect to database after ${MAX_ATTEMPTS} attempts`)
+        }
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * connectionAttempts))
+      }
     }
     
     // Get the most recent analysis results
-    const recentResults = await db.collection('analysis_results')
-      .find({})
-      .sort({ created_at: -1 })
-      .limit(24) // Last 24 hours of data
+    const now = new Date()
+    const twentyFourHoursAgo = new Date(now)
+    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
+    
+    const recentResults = await db.collection('transactions_per_hour')
+      .find({ 
+        timestamp: { $gte: twentyFourHoursAgo, $lte: now }
+      })
+      .sort({ timestamp: 1 }) // Sort chronologically 
       .toArray()
     
     if (recentResults.length < 2) {
@@ -36,15 +50,7 @@ export async function executeTradeStrategy() {
       return
     }
     
-    // Sort by date_hour to ensure chronological order
-    recentResults.sort((a, b) => {
-      if (a.date < b.date) return -1
-      if (a.date > b.date) return 1
-      return parseInt(a.hour) - parseInt(b.hour)
-    })
-    
     // Check for signal - two consecutive hours with counts over 20
-    // (Yes, I know this is a ridiculously simplistic strategy)
     const SIGNAL_THRESHOLD = 20
     let signalDetected = false
     let signalHour = null
@@ -53,17 +59,17 @@ export async function executeTradeStrategy() {
       if (recentResults[i].count > SIGNAL_THRESHOLD && 
           recentResults[i-1].count > SIGNAL_THRESHOLD) {
         signalDetected = true
-        signalHour = recentResults[i].date_hour
+        signalHour = recentResults[i].timestamp
         break
       }
     }
     
     if (!signalDetected) {
       console.log('No trading signal detected in recent data')
-      return
+      return recentResults
     }
     
-    console.log(`Signal detected at ${signalHour}`)
+    console.log(`Signal detected at ${signalHour.toISOString()}`)
     
     // Get technical indicators to determine direction
     const indicators = await getTechnicalIndicators()
@@ -95,15 +101,20 @@ export async function executeTradeStrategy() {
     
     // Check if we already have an active signal for this hour
     const existingSignal = await db.collection('trading_signals')
-      .findOne({ signal_hour: signalHour })
+      .findOne({ 
+        signal_hour: { 
+          $gte: new Date(signalHour.getTime()), 
+          $lt: new Date(signalHour.getTime() + 3600000) // One hour later
+        } 
+      })
     
     if (existingSignal) {
-      console.log(`Already processed signal for ${signalHour}`)
+      console.log(`Already processed signal for ${signalHour.toISOString()}`)
       return
     }
     
     // Place order
-    console.log(`Placing ${direction} order based on signal at ${signalHour}`)
+    console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
     const orderResult = await placeOrder(direction, 0.001) // 0.1 ETH position size
     
     // Record the signal and order in the database

@@ -1,4 +1,4 @@
-import { getDb } from '../lib/mongodb.js'
+import { getDb, connectToDatabase } from '../lib/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load env vars because apparently we need to do this in every file
@@ -53,7 +53,7 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
       return
     }
     
-    // Format the results for display
+    // Format the results for display (only for console output)
     const output = results.map(r => {
       const date = new Date(r._id.hourDate)
       // Format DD/MM/YY
@@ -74,37 +74,32 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     
     console.log(last24HrsOutput || 'No transactions in the last 24 hours')
     
-    // Also store in MongoDB
+    // Prepare data for storing in MongoDB with proper date handling
     const analysisResults = results.map(r => {
-      const date = new Date(r._id.hourDate)
-      // Format DD/MM/YY
-      const day = date.getDate().toString().padStart(2, '0')
-      const month = (date.getMonth() + 1).toString().padStart(2, '0')
-      const year = date.getFullYear().toString().substring(2)
-      // Format HH
-      const hour = date.getHours().toString().padStart(2, '0')
-      const formattedDate = `${day}/${month}/${year}`
+      const timestamp = new Date(r._id.hourDate)
+      const hour = timestamp.getUTCHours()
       
       return {
-        date: formattedDate,
-        hour: hour,
+        timestamp: timestamp,           // Proper Date object for the start of the hour
+        hour: hour,                     // Hour as a number (0-23) IN UTC
         count: r.count,
-        date_hour: `${formattedDate} - ${hour}`,
         created_at: new Date(),
-        // Store the date for proper sorting later
-        hour_date: new Date(r._id.hourDate)
+        // For backward compatibility
+        display_date_hour: formatDateHour(timestamp)
       }
     })
     
-    // Get existing date_hour pairs to avoid duplicates
-    const existingEntries = await db.collection('analysis_results')
-      .find({}, { projection: { date_hour: 1, count: 1 } })
+    // Get existing timestamps to avoid duplicates
+    const existingEntries = await db.collection('transactions_per_hour')
+      .find({}, { projection: { timestamp: 1, count: 1 } })
       .toArray()
     
     // Create a map of existing entries for easier lookup
     const existingEntriesMap = new Map()
     existingEntries.forEach(entry => {
-      existingEntriesMap.set(entry.date_hour, { id: entry._id, count: entry.count })
+      // Use timestamp as the key
+      const key = entry.timestamp.getTime()
+      existingEntriesMap.set(key, { id: entry._id, count: entry.count })
     })
     
     // Separate results into new entries and updates
@@ -112,7 +107,8 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     const updatesToMake = []
     
     analysisResults.forEach(result => {
-      const existingEntry = existingEntriesMap.get(result.date_hour)
+      const key = result.timestamp.getTime()
+      const existingEntry = existingEntriesMap.get(key)
       
       if (!existingEntry) {
         // This is a completely new entry
@@ -121,8 +117,13 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
         // This entry exists but the count has changed - needs update
         updatesToMake.push({
           updateOne: {
-            filter: { date_hour: result.date_hour },
-            update: { $set: { count: result.count, updated_at: new Date() } }
+            filter: { _id: existingEntry.id },
+            update: { 
+              $set: { 
+                count: result.count, 
+                updated_at: new Date() 
+              } 
+            }
           }
         })
       }
@@ -135,13 +136,13 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     
     // Process new entries
     if (newResults.length > 0) {
-      await db.collection('analysis_results').insertMany(newResults)
+      await db.collection('transactions_per_hour').insertMany(newResults)
       console.log(`Saved ${newResults.length} new analysis results to MongoDB`)
     }
     
     // Process updates
     if (updatesToMake.length > 0) {
-      const updateResult = await db.collection('analysis_results').bulkWrite(updatesToMake)
+      const updateResult = await db.collection('transactions_per_hour').bulkWrite(updatesToMake)
       console.log(`Updated ${updateResult.modifiedCount} existing entries in MongoDB`)
     }
     
@@ -163,6 +164,15 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
   }
 }
 
+// Format date and hour for display (DD/MM/YY - HH)
+function formatDateHour(date) {
+  const day = date.getUTCDate().toString().padStart(2, '0')
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
+  const year = date.getUTCFullYear().toString().substring(2)
+  const hour = date.getUTCHours().toString().padStart(2, '0')
+  return `${day}/${month}/${year} - ${hour}`
+}
+
 // Get list of addresses of interest from MongoDB
 async function getAddressesOfInterest(db) {
   const addresses = await db.collection('addresses_of_interest')
@@ -173,57 +183,73 @@ async function getAddressesOfInterest(db) {
   return addresses.map(a => a.address)
 }
 
-// Add a new function to clean up existing duplicates
-async function removeDuplicateResults(closeConnection = true) {
-  console.log('Removing duplicate entries from analysis_results collection...')
-  
-  const db = await getDb()
-  let client = db.client
+// Migrate data from old collection to new one
+async function migrateToNewCollection() {
+  console.log('Migrating data from analysis_results to transactions_per_hour...')
   
   try {
-    // Find all date_hour combinations and their counts
-    const duplicateCheck = await db.collection('analysis_results').aggregate([
-      { $group: {
-        _id: '$date_hour',
-        count: { $sum: 1 },
-        newestId: { $max: '$_id' }
-      }},
-      { $match: { count: { $gt: 1 } }}
-    ]).toArray()
+    await connectToDatabase()
+    const db = await getDb()
     
-    console.log(`Found ${duplicateCheck.length} date_hour combinations with duplicates`)
+    // Get all entries from old collection
+    const oldEntries = await db.collection('analysis_results').find({}).toArray()
+    console.log(`Found ${oldEntries.length} entries to migrate`)
     
-    // For each duplicate group, keep the newest entry and delete the rest
-    let deletedCount = 0
-    for (const dupe of duplicateCheck) {
-      const result = await db.collection('analysis_results').deleteMany({
-        date_hour: dupe._id,
-        _id: { $ne: dupe.newestId }
-      })
-      deletedCount += result.deletedCount
+    if (oldEntries.length === 0) {
+      console.log('No entries to migrate')
+      return { migrated: 0 }
     }
     
-    console.log(`Removed ${deletedCount} duplicate entries`)
-    return { db, client, deletedCount }
+    // Convert to new format
+    const newEntries = oldEntries.map(entry => {
+      // Parse DD/MM/YY format
+      const [day, month, year] = entry.date.split('/')
+      const hour = parseInt(entry.hour)
+      
+      // Create proper date object (assuming 20xx for the year)
+      // Use UTC methods to ensure timezone consistency
+      const timestamp = new Date(Date.UTC(2000 + parseInt(year), parseInt(month) - 1, parseInt(day), hour))
+      
+      return {
+        timestamp: timestamp,
+        hour: hour,  // This should be correct since we're explicitly setting it in UTC above
+        count: entry.count,
+        display_date_hour: entry.date_hour || formatDateHour(timestamp),
+        created_at: entry.created_at || new Date(),
+        updated_at: entry.updated_at || new Date()
+      }
+    })
+    
+    // Delete all existing data in new collection
+    await db.collection('transactions_per_hour').deleteMany({})
+    
+    // Insert all migrated data
+    await db.collection('transactions_per_hour').insertMany(newEntries)
+    
+    console.log(`Successfully migrated ${newEntries.length} entries`)
+    return { migrated: newEntries.length }
   } catch (error) {
-    console.error('Failed to remove duplicates:', error)
-    if (closeConnection && client) {
-      await client.close()
-    }
+    console.error('Migration failed:', error)
     throw error
-  } finally {
-    if (closeConnection && client) {
-      await client.close()
-      console.log('MongoDB connection closed after duplicate removal')
-    }
   }
 }
 
 // Run the script if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // First clean up duplicates, then run the analysis
-  removeDuplicateResults(false)  // Don't close connection yet
-    .then(({ db, client }) => countTransactionsByHour(db, client))
+  // Check if we should migrate
+  const shouldMigrate = process.argv.includes('--migrate')
+  
+  // Create a promise chain
+  let chain = Promise.resolve()
+  
+  // Add migration if needed
+  if (shouldMigrate) {
+    chain = chain.then(() => migrateToNewCollection())
+  }
+  
+  // Run the analysis
+  chain
+    .then(() => countTransactionsByHour())
     .then(() => {
       console.log('Analysis completed successfully')
       process.exit(0)
@@ -234,4 +260,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     })
 }
 
-export { countTransactionsByHour, removeDuplicateResults }
+export { countTransactionsByHour, migrateToNewCollection }
