@@ -24,14 +24,17 @@ export const basicAuthMiddleware = (req, res, next) => {
     return next()
   }
 
-  // Otherwise, apply basic auth
-  expressBasicAuth({
+  // Create the auth middleware once and then immediately execute it
+  const authMiddleware = expressBasicAuth({
     users: { 
       [process.env.BASIC_AUTH_USER || 'admin']: process.env.BASIC_AUTH_PASSWORD || 'changeme' 
     },
     challenge: true,
     realm: 'Ethquake Dashboard'
-  })(req, res, (err) => {
+  })
+  
+  // Execute the middleware with our request and response
+  return authMiddleware(req, res, (err) => {
     if (err) return next(err)
     
     // Mark session as authenticated after successful basic auth
