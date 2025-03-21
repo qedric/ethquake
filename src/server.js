@@ -9,8 +9,6 @@ import transactionDataRouter from './api/transactionData.js'
 import visualizationRouter from './api/visualizationRouter.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { basicAuthMiddleware, sessionAuthMiddleware, apiKeyMiddleware } from './middleware/auth.js'
-import cors from 'cors'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -68,24 +66,6 @@ async function startServer() {
     // Connect to MongoDB first
     await connectToDatabase()
     
-    // Configure CORS to allow credentials
-    app.use(cors({
-      origin: true,  // Allow any origin with credentials
-      credentials: true  // Allow cookies to be sent
-    }))
-    
-    // Add static files
-    app.use(express.static(path.join(__dirname, 'public')))
-    
-    // Protected HTML route with Basic Auth
-    app.use('/charts', basicAuthMiddleware, visualizationRouter)
-    
-    // API routes for chart data - protected by session auth
-    app.use('/api/chart-data', sessionAuthMiddleware, transactionDataRouter)
-    
-    // External API routes - protected by API key
-    app.use('/api/transactions', apiKeyMiddleware, transactionDataRouter)
-    
     // Start Express server
     server = app.listen(PORT, () => {
       console.log(`Ethquake Server running on port ${PORT}.`)
@@ -94,6 +74,11 @@ async function startServer() {
         port: PORT
       }).catch(err => console.error('Failed to log server start:', err))
     })
+
+    // Add the router
+    app.use('/api/transactions', transactionDataRouter)
+    app.use(express.static(path.join(__dirname, 'public')))
+    app.use('/charts', visualizationRouter)
   } catch (error) {
     console.error('Failed to start server:', error)
     // Important: Don't exit on startup error, retry instead
@@ -109,7 +94,7 @@ setInterval(() => {
 }, 300000) // 5 minutes instead of 1 minute
 
 // Status endpoint - might be useful someday, who knows
-app.get('/status', apiKeyMiddleware, async (req, res) => {
+app.get('/status', async (req, res) => {
   try {
     // First check if we're connected to the database
     let db
@@ -174,7 +159,14 @@ async function runDataPipelineTask() {
 
 // Add an authenticated endpoint so you can manually trigger the task
 // without exposing it to every random internet user with a browser
-app.post('/run-pipeline', apiKeyMiddleware, async (req, res) => {
+app.post('/run-pipeline', async (req, res) => {
+  const apiKey = req.headers['x-api-key']
+  
+  // Check if the API key is valid - can't believe I have to explain this
+  if (!apiKey || apiKey !== process.env.API_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized. Nice try.' })
+  }
+  
   try {
     const result = await runDataPipelineTask()
     res.json(result)

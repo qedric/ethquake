@@ -121,20 +121,8 @@
     // Fetch data and create chart
     async function fetchDataAndChart() {
       try {
-        // Include credentials with the fetch request to send cookies
-        const response = await fetch('/api/chart-data/hourly', {
-          credentials: 'same-origin'  // Send cookies
-        });
-        
-        if (!response.ok) {
-          if (response.status === 401) {
-            // If unauthorized, we might need to refresh the page to trigger auth
-            console.error('Authentication failed. Redirecting to login...');
-            window.location.href = '/charts';
-            return;
-          }
-          throw new Error('Network response was not ok');
-        }
+        const response = await fetch('/api/transactions/hourly');
+        if (!response.ok) throw new Error('Network response was not ok');
         
         const data = await response.json();
         originalData = data; // Store original data for filtering
