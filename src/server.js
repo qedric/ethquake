@@ -6,6 +6,9 @@ import { executeTradeStrategy } from './trading/strategy.js'
 import { getDb, connectToDatabase, logActivity } from './lib/mongodb.js'
 import dotenv from 'dotenv'
 import transactionDataRouter from './api/transactionData.js'
+import visualizationRouter from './api/visualizationRouter.js'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -13,6 +16,10 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 8080
 let server = null
+
+// Define __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Basic health check endpoint for Railway
 app.get('/', (req, res) => {
@@ -61,7 +68,7 @@ async function startServer() {
     
     // Start Express server
     server = app.listen(PORT, () => {
-      console.log(`EthQuake Server running on port ${PORT}.`)
+      console.log(`Ethquake Server running on port ${PORT}.`)
       logActivity({
         type: 'SERVER_START',
         port: PORT
@@ -70,6 +77,8 @@ async function startServer() {
 
     // Add the router
     app.use('/api/transactions', transactionDataRouter)
+    app.use(express.static(path.join(__dirname, 'public')))
+    app.use('/charts', visualizationRouter)
   } catch (error) {
     console.error('Failed to start server:', error)
     // Important: Don't exit on startup error, retry instead
