@@ -80,7 +80,7 @@ async function startServer() {
     
     // Start Express server
     server = app.listen(PORT, () => {
-      console.log(`EthQuake Trading Server running on port ${PORT}. Not that you'll ever look at it.`)
+      console.log(`EthQuake Server running on port ${PORT}.`)
       logActivity({
         type: 'SERVER_START',
         port: PORT
@@ -118,7 +118,6 @@ app.get('/status', async (req, res) => {
 })
 
 // Main cron job that runs your data pipeline every 15 minutes
-// because you clearly think the market needs to be monitored *that* frequently
 cron.schedule('*/15 * * * *', async () => {
   console.log('Running scheduled task:', new Date().toISOString())
   
