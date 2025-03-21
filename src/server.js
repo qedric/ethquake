@@ -9,9 +9,16 @@ import transactionDataRouter from './api/transactionData.js'
 import visualizationRouter from './api/visualizationRouter.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import basicAuth from 'express-basic-auth'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
+
+// Basic authentication middleware
+const authMiddleware = basicAuth({
+  users: { [process.env.BASIC_AUTH_USER]: process.env.BASIC_AUTH_PASSWORD },
+  challenge: true
+})
 
 const app = express()
 const PORT = process.env.PORT || 8080
@@ -21,13 +28,12 @@ let server = null
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Basic health check endpoint for Railway
-app.get('/', (req, res) => {
+// Add authentication to routes
+app.get('/', authMiddleware, (req, res) => {
   res.send('Ethquake Server is running. Go away.')
 })
 
-// Add a proper health check endpoint that Railway can use
-app.get('/health', (req, res) => {
+app.get('/health', authMiddleware, (req, res) => {
   res.status(200).send({ status: 'ok' })
 })
 
@@ -75,10 +81,10 @@ async function startServer() {
       }).catch(err => console.error('Failed to log server start:', err))
     })
 
-    // Add the router
-    app.use('/api/transactions', transactionDataRouter)
+    // Add the router with authentication
+    app.use('/api/transactions', authMiddleware, transactionDataRouter)
     app.use(express.static(path.join(__dirname, 'public')))
-    app.use('/charts', visualizationRouter)
+    app.use('/charts', authMiddleware, visualizationRouter)
   } catch (error) {
     console.error('Failed to start server:', error)
     // Important: Don't exit on startup error, retry instead
@@ -94,7 +100,7 @@ setInterval(() => {
 }, 300000) // 5 minutes instead of 1 minute
 
 // Status endpoint - might be useful someday, who knows
-app.get('/status', async (req, res) => {
+app.get('/status', authMiddleware, async (req, res) => {
   try {
     // First check if we're connected to the database
     let db
@@ -159,7 +165,7 @@ async function runDataPipelineTask() {
 
 // Add an authenticated endpoint so you can manually trigger the task
 // without exposing it to every random internet user with a browser
-app.post('/run-pipeline', async (req, res) => {
+app.post('/run-pipeline', authMiddleware, async (req, res) => {
   const apiKey = req.headers['x-api-key']
   
   // Check if the API key is valid - can't believe I have to explain this
