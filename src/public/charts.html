@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ethquake Analytics</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -24,31 +26,118 @@
       text-align: center;
       color: #333;
     }
+    .controls {
+      margin: 15px auto;
+      width: 90%;
+      max-width: 1200px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      min-width: 200px;
+    }
+    .control-label {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .threshold-value {
+      display: inline-block;
+      min-width: 30px;
+      text-align: center;
+    }
+    button {
+      padding: 8px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
   </style>
 </head>
 <body>
   <h1>Ethquake Transaction Analysis</h1>
+  
+  <div class="controls">
+    <div class="control-group">
+      <label class="control-label">Threshold: <span id="thresholdValue" class="threshold-value">0</span></label>
+      <input type="range" id="thresholdSlider" min="0" max="100" value="0" step="1">
+    </div>
+    
+    <button id="resetZoom">Reset Zoom</button>
+  </div>
   
   <div class="chart-container">
     <canvas id="txChart"></canvas>
   </div>
 
   <script>
+    // Global variables
+    let chartInstance = null;
+    let originalData = [];
+    
+    // Update threshold display
+    const thresholdSlider = document.getElementById('thresholdSlider');
+    const thresholdValue = document.getElementById('thresholdValue');
+    
+    thresholdSlider.addEventListener('input', function() {
+      thresholdValue.textContent = this.value;
+      updateChartWithThreshold(Number(this.value));
+    });
+    
+    // Reset zoom button
+    document.getElementById('resetZoom').addEventListener('click', function() {
+      if (chartInstance) {
+        chartInstance.resetZoom();
+      }
+    });
+    
+    // Filter data based on threshold
+    function updateChartWithThreshold(threshold) {
+      if (!chartInstance || !originalData.length) return;
+      
+      const filteredData = originalData.map(item => {
+        // If count is below threshold, return null to hide the bar
+        // but keep the label position
+        return item.count >= threshold ? item.count : null;
+      });
+      
+      chartInstance.data.datasets[0].data = filteredData;
+      
+      // Update y-axis to start from threshold
+      chartInstance.options.scales.y.min = threshold > 0 ? threshold : 0;
+      
+      chartInstance.update();
+    }
+    
     // Fetch data and create chart
     async function fetchDataAndChart() {
       try {
-        const response = await fetch('/charts/data');
+        const response = await fetch('/api/transactions/hourly');
         if (!response.ok) throw new Error('Network response was not ok');
         
         const data = await response.json();
+        originalData = data; // Store original data for filtering
         
         // Format data for Chart.js
-        const labels = data.map(item => item.display_date_hour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`);
+        const labels = data.map(item => item.displayDateHour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`);
         const counts = data.map(item => item.count);
+        
+        // Find the maximum count to set slider max value
+        const maxCount = Math.max(...counts);
+        thresholdSlider.max = maxCount;
         
         // Create chart
         const ctx = document.getElementById('txChart').getContext('2d');
-        const chart = new Chart(ctx, {
+        chartInstance = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: labels,
@@ -70,6 +159,22 @@
               tooltip: {
                 mode: 'index',
                 intersect: false,
+              },
+              zoom: {
+                pan: {
+                  enabled: true,
+                  mode: 'x',
+                  modifierKey: 'ctrl',
+                },
+                zoom: {
+                  wheel: {
+                    enabled: true,
+                  },
+                  pinch: {
+                    enabled: true
+                  },
+                  mode: 'x',
+                }
               }
             },
             scales: {
@@ -78,6 +183,9 @@
                 title: {
                   display: true,
                   text: 'Count'
+                },
+                ticks: {
+                  precision: 0 // Forces integer ticks
                 }
               },
               x: {
