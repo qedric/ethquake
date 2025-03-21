@@ -42,21 +42,21 @@ export const basicAuthMiddleware = (req, res, next) => {
 
 // Session-auth middleware for client-facing API routes
 export const sessionAuthMiddleware = (req, res, next) => {
-  console.log('Session auth check:', req.session); // Debug log
+  console.log('Session auth check:', req.session) // Debug log
   
   if (req.session && req.session.authenticated) {
-    return next();
+    return next()
   }
   
   // If this is a browser request and we're in production,
   // it might be better to redirect to /charts for authentication
   // instead of returning a 401
-  const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+  const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html')
   if (acceptsHtml) {
-    return res.redirect('/charts');
+    return res.redirect('/charts')
   }
   
-  return res.status(401).json({ error: 'Unauthorized' });
+  return res.status(401).json({ error: 'Unauthorized' })
 }
 
 // API key middleware for external API routes
