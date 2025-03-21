@@ -17,50 +17,24 @@ export const sessionMiddleware = session({
   }
 })
 
-// Basic auth middleware for HTML routes
-export const basicAuthMiddleware = (req, res, next) => {
-  // If session already exists, they're authenticated
-  if (req.session && req.session.authenticated) {
-    return next()
+// Single basic auth middleware for everything
+export const authMiddleware = expressBasicAuth({
+  users: { 
+    [process.env.BASIC_AUTH_USER || 'admin']: process.env.BASIC_AUTH_PASSWORD || 'changeme' 
+  },
+  challenge: true,
+  unauthorizedResponse: (req) => {
+    // Return JSON for API requests, text for browser requests
+    const isApiRequest = req.headers.accept && req.headers.accept.includes('application/json')
+    return isApiRequest 
+      ? { error: 'Unauthorized' } 
+      : 'Authentication required'
   }
+})
 
-  // Create the auth middleware once and then immediately execute it
-  const authMiddleware = expressBasicAuth({
-    users: { 
-      [process.env.BASIC_AUTH_USER || 'admin']: process.env.BASIC_AUTH_PASSWORD || 'changeme' 
-    },
-    challenge: true,
-    realm: 'Ethquake Dashboard'
-  })
-  
-  // Execute the middleware with our request and response
-  return authMiddleware(req, res, (err) => {
-    if (err) return next(err)
-    
-    // Mark session as authenticated after successful basic auth
-    req.session.authenticated = true
-    next()
-  })
-}
-
-// Session-auth middleware for client-facing API routes
-export const sessionAuthMiddleware = (req, res, next) => {
-  console.log('Session auth check:', req.session) // Debug log
-  
-  if (req.session && req.session.authenticated) {
-    return next()
-  }
-  
-  // If this is a browser request and we're in production,
-  // it might be better to redirect to /charts for authentication
-  // instead of returning a 401
-  const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html')
-  if (acceptsHtml) {
-    return res.redirect('/charts')
-  }
-  
-  return res.status(401).json({ error: 'Unauthorized' })
-}
+// For backward compatibility - both point to the same middleware
+export const basicAuthMiddleware = authMiddleware
+export const sessionAuthMiddleware = authMiddleware
 
 // API key middleware for external API routes
 export const apiKeyMiddleware = (req, res, next) => {
