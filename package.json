@@ -1,5 +1,5 @@
 {
-  "name": "ethquake",
+  "name": "Ethquake",
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
@@ -26,6 +26,7 @@
     "@eslint/js": "^9.22.0",
     "@types/node": "^22.13.10",
     "eslint": "^9.22.0",
-    "eslint-plugin-import": "^2.31.0"
+    "eslint-plugin-import": "^2.31.0",
+    "nodemon": "^3.1.9"
   }
 }

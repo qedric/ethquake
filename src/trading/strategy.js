@@ -4,7 +4,7 @@ import { getTechnicalIndicators } from './indicators.js'
 
 /**
  * Executes the trading strategy based on:
- * 1. EthQuake signals (address activity spikes)
+ * 1. Ethquake signals (address activity spikes)
  * 2. Technical indicators (EMAs)
  * 
  * Strategy:

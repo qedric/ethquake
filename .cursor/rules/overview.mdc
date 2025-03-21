@@ -117,7 +117,7 @@ I also have a TradingView account.
 
 I'd like to enter trades based on the indicator developed in this project, in tandem with a small number of other indicators, probably Moving Averages to determine likely direction.
 
-EtHQuake Indicator: 
+Ethquake Indicator: 
 
 The [txCountByHour.js](mdc:src/scripts/txCountByHour.js) script returns data that looks like this: 
 
