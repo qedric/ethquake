@@ -74,9 +74,6 @@ async function startServer() {
       credentials: true  // Allow cookies to be sent
     }))
     
-    // Add session middleware BEFORE route handlers
-    app.use(sessionMiddleware)
-    
     // Add static files
     app.use(express.static(path.join(__dirname, 'public')))
     

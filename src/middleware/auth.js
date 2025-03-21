@@ -1,21 +1,7 @@
 import expressBasicAuth from 'express-basic-auth'
-import session from 'express-session'
 import dotenv from 'dotenv'
 
 dotenv.config()
-
-// Session middleware configuration
-export const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET || 'changeme',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 3600000, // 1 hour
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // Allow cross-site cookies in production
-    httpOnly: true // Prevents JavaScript from reading the cookie
-  }
-})
 
 // Single basic auth middleware for everything
 export const authMiddleware = expressBasicAuth({
