@@ -27,73 +27,126 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
           { to_address: { $in: await getAddressesOfInterest(db) } }
         ]
       }},
-      // Add fields for date parts - using formats that work with MongoDB
+      // Add fields for date parts
       { $addFields: {
-        fullDate: { $dateToString: { format: '%d/%m/%Y', date: '$block_datetime' } },
-        hour: { $dateToString: { format: '%H', date: '$block_datetime' } }
+        // Create a truncated date at the hour level (remove minutes and seconds)
+        hourDate: {
+          $dateTrunc: {
+            date: "$block_datetime",
+            unit: "hour"
+          }
+        }
       }},
-      // Group by date and hour
+      // Group by the hour-level date
       { $group: {
-        _id: { fullDate: '$fullDate', hour: '$hour' },
-        count: { $sum: 1 },
-        transactions: { $push: '$$ROOT' }
+        _id: { hourDate: "$hourDate" },
+        count: { $sum: 1 }
       }},
-      // Sort by date and hour
-      { $sort: { '_id.fullDate': 1, '_id.hour': 1 } }
+      // Sort chronologically
+      { $sort: { "_id.hourDate": 1 }}
     ]
     
     const results = await db.collection('transactions').aggregate(pipeline).toArray()
     
     if (results.length === 0) {
-      console.log('No transactions found. Did you even load any data?')
+      console.log('No transactions found.')
       return
     }
     
-    // Format the results - convert 4-digit year to 2-digit year here in JavaScript
+    // Format the results for display
     const output = results.map(r => {
-      // Format from DD/MM/YYYY to DD/MM/YY
-      const dateParts = r._id.fullDate.split('/')
-      const year = dateParts[2].substring(2) // Get last 2 digits
-      const formattedDate = `${dateParts[0]}/${dateParts[1]}/${year}`
+      const date = new Date(r._id.hourDate)
+      // Format DD/MM/YY
+      const day = date.getDate().toString().padStart(2, '0')
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const year = date.getFullYear().toString().substring(2)
+      // Format HH
+      const hour = date.getHours().toString().padStart(2, '0')
       
-      return `${formattedDate} - ${r._id.hour},${r.count}`
-    }).join('\n')
+      return `${day}/${month}/${year} - ${hour},${r.count}`
+    })
     
     console.log('Analysis complete.')
-    console.log('\nHourly transaction counts:')
-    console.log(output)
+    console.log('\nHourly transaction counts (last 24 hrs):')
+    
+    // Get the last 24 entries chronologically
+    const last24HrsOutput = output.slice(-24).join('\n')
+    
+    console.log(last24HrsOutput || 'No transactions in the last 24 hours')
     
     // Also store in MongoDB
     const analysisResults = results.map(r => {
-      // Format from DD/MM/YYYY to DD/MM/YY
-      const dateParts = r._id.fullDate.split('/')
-      const year = dateParts[2].substring(2) // Get last 2 digits
-      const formattedDate = `${dateParts[0]}/${dateParts[1]}/${year}`
+      const date = new Date(r._id.hourDate)
+      // Format DD/MM/YY
+      const day = date.getDate().toString().padStart(2, '0')
+      const month = (date.getMonth() + 1).toString().padStart(2, '0')
+      const year = date.getFullYear().toString().substring(2)
+      // Format HH
+      const hour = date.getHours().toString().padStart(2, '0')
+      const formattedDate = `${day}/${month}/${year}`
       
       return {
         date: formattedDate,
-        hour: r._id.hour,
+        hour: hour,
         count: r.count,
-        date_hour: `${formattedDate} - ${r._id.hour}`,
-        created_at: new Date()
+        date_hour: `${formattedDate} - ${hour}`,
+        created_at: new Date(),
+        // Store the date for proper sorting later
+        hour_date: new Date(r._id.hourDate)
       }
     })
     
     // Get existing date_hour pairs to avoid duplicates
     const existingEntries = await db.collection('analysis_results')
-      .find({}, { projection: { date_hour: 1 } })
+      .find({}, { projection: { date_hour: 1, count: 1 } })
       .toArray()
     
-    const existingDateHours = new Set(existingEntries.map(entry => entry.date_hour))
+    // Create a map of existing entries for easier lookup
+    const existingEntriesMap = new Map()
+    existingEntries.forEach(entry => {
+      existingEntriesMap.set(entry.date_hour, { id: entry._id, count: entry.count })
+    })
     
-    // Filter out results that already exist in the database
-    const newResults = analysisResults.filter(result => !existingDateHours.has(result.date_hour))
+    // Separate results into new entries and updates
+    const newResults = []
+    const updatesToMake = []
     
+    analysisResults.forEach(result => {
+      const existingEntry = existingEntriesMap.get(result.date_hour)
+      
+      if (!existingEntry) {
+        // This is a completely new entry
+        newResults.push(result)
+      } else if (existingEntry.count !== result.count) {
+        // This entry exists but the count has changed - needs update
+        updatesToMake.push({
+          updateOne: {
+            filter: { date_hour: result.date_hour },
+            update: { $set: { count: result.count, updated_at: new Date() } }
+          }
+        })
+      }
+    })
+    
+    // Add debug logging
+    console.log(`Found ${existingEntries.length} existing entries in MongoDB`)
+    console.log(`Found ${analysisResults.length} total results from current analysis`)
+    console.log(`After filtering: ${newResults.length} new entries, ${updatesToMake.length} updates needed`)
+    
+    // Process new entries
     if (newResults.length > 0) {
       await db.collection('analysis_results').insertMany(newResults)
       console.log(`Saved ${newResults.length} new analysis results to MongoDB`)
-    } else {
-      console.log('No new analysis results to save')
+    }
+    
+    // Process updates
+    if (updatesToMake.length > 0) {
+      const updateResult = await db.collection('analysis_results').bulkWrite(updatesToMake)
+      console.log(`Updated ${updateResult.modifiedCount} existing entries in MongoDB`)
+    }
+    
+    if (newResults.length === 0 && updatesToMake.length === 0) {
+      console.log('No changes needed to analysis results')
     }
     
     return analysisResults
