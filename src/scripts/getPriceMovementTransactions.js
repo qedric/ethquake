@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import axios from 'axios'
+import { fetchTransactions } from '../lib/getTWTransactions'
 
 /* 
 
@@ -71,49 +71,6 @@ function generateControlTimestamps(priceMovements, count) {
   return controlTimestamps
 }
 
-/**
- * Fetches transactions from ThirdWeb Insights API with flexible filtering options
- * @param {Object} options - Filter options for the API query
- * @returns {Array} Array of transaction objects
- */
-async function fetchTransactions(options = {}) {
-  try {
-    // Base URL with chain and client ID
-    let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
-    
-    // Default parameters
-    url += `&sort_by=block_number&sort_order=desc&limit=200`
-
-    // Add filter for minimum ETH value if not provided
-    if (!options.filter_value_gte) {
-      url += `&filter_value_gte=${DEFAULT_MIN_ETH_VALUE}`
-    }
-    
-    // Add all filters from options
-    for (const [key, value] of Object.entries(options)) {
-      // Skip null or undefined values
-      if (value === null || value === undefined) continue
-      
-      // Add filter parameter to URL
-      url += `&${key}=${value}`
-    }
-    
-    // Log basic info about the request (keeping some logging for debugging)
-    /* console.log(`Fetching transactions with filters:`, 
-      Object.keys(options).length > 0 ? options : 'No filters') */
-    
-    const response = await axios.get(url)
-    return response.data.data || [] 
-  } catch (error) {
-    console.error('Error fetching transactions:', error.message)
-    if (error.response) {
-      console.error('Response data:', error.response.data)
-      console.error('Response status:', error.response.status)
-    }
-    return [] // Return empty array on error
-  }
-}
-
 // Process transactions before price movements (Step 2)
 async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHours = 1) {
   try {
@@ -138,7 +95,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Processing price movement ${i+1}/${priceMovements.length} at ${movement.date}`)
       
       // Fetch transactions for the period before the price movement
-      const transactions = await fetchTransactions({
+      const transactions = fetchTransactions({
         filter_block_timestamp_gte: startTimestamp,
         filter_block_timestamp_lte: movementTimestamp,
         sort_by: 'block_number',
@@ -208,7 +165,7 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Processing control period ${i+1}/${controlTimestamps.length} at ${control.date}`)
       
       // Fetch transactions for the control period
-      const transactions = await fetchTransactions({
+      const transactions = fetchTransactions({
         filter_block_timestamp_gte: startTimestamp,
         filter_block_timestamp_lte: controlTimestamp,
         sort_by: 'block_number',
@@ -289,6 +246,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export { 
   getTransactionsBeforePriceMovements, 
-  getControlGroupTransactions, 
-  fetchTransactions 
+  getControlGroupTransactions
 }

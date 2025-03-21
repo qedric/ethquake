@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { fetchTransactions } from './getTransactions.js'
+import { fetchTransactions } from '../lib/getTWTransactions.js'
 import { getDb } from '../lib/mongodb.js'
 
 /**
