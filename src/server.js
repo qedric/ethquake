@@ -117,9 +117,10 @@ app.get('/status', async (req, res) => {
   }
 })
 
-// Main cron job that runs your data pipeline every 15 minutes
-cron.schedule('*/15 * * * *', async () => {
-  console.log('Running scheduled task:', new Date().toISOString())
+// Extract the pipeline task into a separate function so you can 
+// manually trigger it like the control freak you are
+async function runDataPipelineTask() {
+  console.log('Running data pipeline task:', new Date().toISOString())
   
   try {
     // Update transactions data
@@ -136,7 +137,32 @@ cron.schedule('*/15 * * * *', async () => {
     console.log('Executing trading strategy...')
     await executeTradeStrategy()
     
+    return { success: true }
   } catch (error) {
-    console.error('Error in scheduled task:', error)
+    console.error('Error in data pipeline task:', error)
+    return { success: false, error: error.message }
   }
+}
+
+// Add an authenticated endpoint so you can manually trigger the task
+// without exposing it to every random internet user with a browser
+app.post('/run-pipeline', async (req, res) => {
+  const apiKey = req.headers['x-api-key']
+  
+  // Check if the API key is valid - can't believe I have to explain this
+  if (!apiKey || apiKey !== process.env.API_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized. Nice try.' })
+  }
+  
+  try {
+    const result = await runDataPipelineTask()
+    res.json(result)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// Main cron job that runs your data pipeline every 15 minutes
+cron.schedule('*/15 * * * *', async () => {
+  await runDataPipelineTask()
 }) 
