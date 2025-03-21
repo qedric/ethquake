@@ -7,7 +7,7 @@ dotenv.config()
 
 // Constants
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
-const DEFAULT_MIN_ETH_VALUE = "100000000000000000000"
+const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')
@@ -25,7 +25,7 @@ export async function fetchTransactions(options = {}) {
     let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
     
     // Default parameters
-    url += `&sort_by=block_number&sort_order=desc&limit=200`
+    url += '&sort_by=block_number&sort_order=desc&limit=200'
 
     // Add filter for minimum ETH value if not provided
     if (!options.filter_value_gte) {

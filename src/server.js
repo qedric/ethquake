@@ -103,7 +103,27 @@ setInterval(() => {
 // Status endpoint - might be useful someday, who knows
 app.get('/status', async (req, res) => {
   try {
-    const db = await getDb()
+    // First check if we're connected to the database
+    let db
+    try {
+      db = await getDb()
+    } catch (error) {
+      console.log('attempting reconnect - ', error)
+      // Try to reconnect
+      try {
+        await connectToDatabase()
+        db = await getDb()
+      } catch (reconnectError) {
+        console.error('Failed to reconnect to database:', reconnectError)
+        return res.status(500).json({ 
+          status: 'degraded',
+          error: 'Database connection unavailable',
+          lastUpdate: new Date().toISOString()
+        })
+      }
+    }
+    
+    // If we've made it this far, MongoDB has graciously decided to work
     const txCount = await db.collection('transactions').countDocuments()
     const analysisCount = await db.collection('analysis_results').countDocuments()
     res.json({

@@ -1,4 +1,4 @@
-import { getDb } from '../lib/mongodb.js'
+import { getDb , connectToDatabase } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
 
@@ -12,9 +12,18 @@ import { getTechnicalIndicators } from './indicators.js'
  * - Use EMAs (20, 50, 100, 200) to determine direction
  */
 export async function executeTradeStrategy() {
-  const db = await getDb()
-  
   try {
+    // First try to get the database
+    let db
+    try {
+      db = await getDb()
+    } catch (error) {
+      console.log('attempting reconnect - ', error)
+      // Try to reconnect because that's just what we do now
+      await connectToDatabase()
+      db = await getDb()
+    }
+    
     // Get the most recent analysis results
     const recentResults = await db.collection('analysis_results')
       .find({})

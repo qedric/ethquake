@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename)
 // Constants
 const TW_CLIENT_ID = process.env.TW_CLIENT_ID
 const OUTPUT_DIR = path.join(__dirname, '../data')
-const DEFAULT_MIN_ETH_VALUE = "100000000000000000000"
+const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
 
 if (!TW_CLIENT_ID) {
   console.error('Missing TW_CLIENT_ID in environment variables')

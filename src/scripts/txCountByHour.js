@@ -32,18 +32,18 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
         // Create a truncated date at the hour level (remove minutes and seconds)
         hourDate: {
           $dateTrunc: {
-            date: "$block_datetime",
-            unit: "hour"
+            date: '$block_datetime',
+            unit: 'hour'
           }
         }
       }},
       // Group by the hour-level date
       { $group: {
-        _id: { hourDate: "$hourDate" },
+        _id: { hourDate: '$hourDate' },
         count: { $sum: 1 }
       }},
       // Sort chronologically
-      { $sort: { "_id.hourDate": 1 }}
+      { $sort: { '_id.hourDate': 1 }}
     ]
     
     const results = await db.collection('transactions').aggregate(pipeline).toArray()
@@ -184,9 +184,9 @@ async function removeDuplicateResults(closeConnection = true) {
     // Find all date_hour combinations and their counts
     const duplicateCheck = await db.collection('analysis_results').aggregate([
       { $group: {
-        _id: "$date_hour",
+        _id: '$date_hour',
         count: { $sum: 1 },
-        newestId: { $max: "$_id" }
+        newestId: { $max: '$_id' }
       }},
       { $match: { count: { $gt: 1 } }}
     ]).toArray()
