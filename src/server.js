@@ -1,7 +1,7 @@
 import express from 'express'
 import cron from 'node-cron'
 import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress.js'
-import { analyzeTransactions } from './scripts/analyse.js'
+import { countTransactionsByHour } from './scripts/txCountByHour.js'
 import { executeTradeStrategy } from './trading/strategy.js'
 import { getDb, connectToDatabase, logActivity } from './lib/mongodb.js'
 import dotenv from 'dotenv'
@@ -130,7 +130,7 @@ cron.schedule('*/15 * * * *', async () => {
     
     // Run analysis
     console.log('Running transaction analysis...')
-    const analysisResults = await analyzeTransactions()
+    const analysisResults = await countTransactionsByHour()
     console.log(`Analysis complete with ${analysisResults?.length || 0} hourly results`)
     
     // Execute trading strategy based on the latest analysis
