@@ -121,7 +121,8 @@
     // Fetch data and create chart
     async function fetchDataAndChart() {
       try {
-        const response = await fetch('/api/transactions/hourly');
+        // Use the session-protected endpoint with no API key needed
+        const response = await fetch('/api/chart-data/hourly');
         if (!response.ok) throw new Error('Network response was not ok');
         
         const data = await response.json();
