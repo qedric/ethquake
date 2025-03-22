@@ -114,13 +114,13 @@ export async function placeOrder(side, size) {
 
     console.log('marketOrderResult:', marketOrderResult)
 
-    if (marketOrderResult.result === 'success') {
+    if (marketOrderResult.data.result === 'success') {
 
       const trailingStopOrderResult = await sendOrder(path, trailingStopOrderData)
 
       return {
-        marketOrder: marketOrderResult,
-        trailingStopOrder: trailingStopOrderResult
+        marketOrder: marketOrderResult.data,
+        trailingStopOrder: trailingStopOrderResult.data
       }
     }
 
