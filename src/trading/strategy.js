@@ -78,20 +78,13 @@ export async function executeTradeStrategy() {
     // Determine trade direction based on EMAs
     let direction = 'none'
     
-    // Basic trend determination
-    // Price above all EMAs = bullish
-    if (price > ema20 && price > ema50 && price > ema100 && price > ema200) {
+    // Check if EMAs are in order for a bullish trend
+    if (ema20 > ema50 && ema50 > ema100 && ema100 > ema200) {
       direction = 'buy'
     } 
-    // Price below all EMAs = bearish
-    else if (price < ema20 && price < ema50 && price < ema100 && price < ema200) {
+    // Check if EMAs are in order for a bearish trend
+    else if (ema20 < ema50 && ema50 < ema100 && ema100 < ema200) {
       direction = 'sell'
-    }
-    // Additional logic: look at EMA alignment
-    else if (ema20 > ema50 && ema50 > ema100) {
-      direction = 'buy'  // Bullish alignment
-    } else if (ema20 < ema50 && ema50 < ema100) {
-      direction = 'sell' // Bearish alignment
     }
     
     if (direction === 'none') {
@@ -115,7 +108,7 @@ export async function executeTradeStrategy() {
     
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-    const orderResult = await placeOrder(direction, 0.001) // 0.1 ETH position size
+    const orderResult = await placeOrder(direction, 0.001, { trailingStop: 0.04 }) // 0.1 ETH position size with 4% trailing stop
     
     // Record the signal and order in the database
     await db.collection('trading_signals').insertOne({
