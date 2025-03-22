@@ -30,7 +30,7 @@ function getKrakenSignature(urlPath, nonce, data) {
  */
 export async function getMarketPrice() {
   try {
-    const response = await axios.get(`${REST_URL}/tickers`)
+    const response = await axios.get('https://futures.kraken.com/derivatives/api/v3\'/tickers')
     const ethFuture = response.data.tickers.find(t => t.symbol === 'PI_ETHUSD')
 
     if (!ethFuture) {
@@ -51,7 +51,7 @@ export async function getMarketPrice() {
 
 async function sendOrder(payload) {
 
-  const BaseURL = "https://futures.kraken.com"
+  const BaseURL = 'https://futures.kraken.com'
   const nonce = Date.now().toString()
   const payloadString = querystring.stringify(payload)
 
@@ -116,7 +116,7 @@ export async function placeOrder(side, size) {
 
     if (marketOrderResult.data.result === 'success') {
 
-      const trailingStopOrderResult = await sendOrder(path, trailingStopOrderData)
+      const trailingStopOrderResult = await sendOrder(trailingStopOrderData)
 
       return {
         marketOrder: marketOrderResult.data,

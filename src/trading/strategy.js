@@ -73,7 +73,7 @@ export async function executeTradeStrategy() {
     
     // Get technical indicators to determine direction
     const indicators = await getTechnicalIndicators()
-    const { ema20, ema50, ema100, ema200, price } = indicators
+    const { ema20, ema50, ema100, ema200 } = indicators
     
     // Determine trade direction based on EMAs
     let direction = 'none'
