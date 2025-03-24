@@ -25,30 +25,6 @@ function getKrakenSignature(urlPath, nonce, data) {
   return signature
 }
 
-/**
- * Gets the current market price for ETH futures
- */
-export async function getMarketPrice() {
-  try {
-    const response = await axios.get('https://futures.kraken.com/derivatives/api/v3\'/tickers')
-    const ethFuture = response.data.tickers.find(t => t.symbol === 'PI_ETHUSD')
-
-    if (!ethFuture) {
-      throw new Error('ETH futures ticker not found')
-    }
-
-    return {
-      price: parseFloat(ethFuture.last),
-      bid: parseFloat(ethFuture.bid),
-      ask: parseFloat(ethFuture.ask),
-      timestamp: new Date()
-    }
-  } catch (error) {
-    console.error('Error getting market price:', error)
-    throw error
-  }
-}
-
 async function sendOrder(payload) {
 
   const BaseURL = 'https://futures.kraken.com'
@@ -84,7 +60,7 @@ async function sendOrder(payload) {
  * @param {number} size - Position size in ETH
  * @param {object} options - Additional order options
  */
-export async function placeOrder(side, size) {
+export async function placeOrder(side, size, marketOnly) {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
   }
@@ -101,7 +77,7 @@ export async function placeOrder(side, size) {
     // Create the trailing stop order data
     const trailingStopOrderData = {
       orderType: 'trailing_stop',
-      symbol: 'PI_ETHUSD',
+      symbol: 'PF_ETHUSD',
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: size,
       trailingStopDeviationUnit: 'PERCENT',
@@ -116,11 +92,15 @@ export async function placeOrder(side, size) {
 
     if (marketOrderResult.data.result === 'success') {
 
-      const trailingStopOrderResult = await sendOrder(trailingStopOrderData)
+      let trailingStopOrderResult = null
+      if(!marketOnly){
+        trailingStopOrderResult = await sendOrder(trailingStopOrderData)
+        console.log('trailingStopOrderResult:', trailingStopOrderResult)
+      }
 
       return {
         marketOrder: marketOrderResult.data,
-        trailingStopOrder: trailingStopOrderResult.data
+        trailingStopOrder: trailingStopOrderResult?.data
       }
     }
 
@@ -135,4 +115,30 @@ export async function placeOrder(side, size) {
       error: error.message
     }
   }
+}
+
+export async function getOpenPositions() {
+
+  const nonce = Date.now().toString()
+  const signature = getKrakenSignature('/api/v3/openpositions', nonce, '{}')
+  console.log(`Authent: ${signature}`)
+
+  let config = {
+    method: 'get',
+    maxBodyLength: Infinity,
+    url: 'https://futures.kraken.com/derivatives/api/v3/openpositions',
+    headers: {
+      'Accept': 'application/json',
+      'APIKey': API_KEY,
+      'Authent': signature
+    }
+  }
+
+  try {
+    return await axios.request(config)
+  } catch (error) {
+    console.error('API Error:', error.response?.data || error.message)
+    throw error
+  }
+
 }

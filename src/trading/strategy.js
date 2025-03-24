@@ -33,16 +33,17 @@ export async function executeTradeStrategy() {
       }
     }
     
-    // Get the most recent analysis results
+    // Get the last two hours of analysis results
     const now = new Date()
-    const twentyFourHoursAgo = new Date(now)
-    twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24)
+    const twoHoursAgo = new Date(now)
+    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2)
     
     const recentResults = await db.collection('transactions_per_hour')
       .find({ 
-        timestamp: { $gte: twentyFourHoursAgo, $lte: now }
+        timestamp: { $gte: twoHoursAgo, $lte: now }
       })
-      .sort({ timestamp: 1 }) // Sort chronologically 
+      .sort({ timestamp: 1 }) 
+      .limit(2) // Just get the two most recent records
       .toArray()
     
     if (recentResults.length < 2) {
@@ -105,10 +106,42 @@ export async function executeTradeStrategy() {
       console.log(`Already processed signal for ${signalHour.toISOString()}`)
       return
     }
+
+    // Get open positions
+    /* const openPositionsResponse = await getOpenPositions()
+    console.log('open positions:', openPositionsResponse)
+    
+    // Check if we have an open ETH position
+    let existingEthPosition = null
+    if (openPositionsResponse?.result === "success" && openPositionsResponse.openPositions) {
+      existingEthPosition = openPositionsResponse.openPositions.find(
+        position => position.symbol === "PF_ETHUSD"
+      )
+    }
+    
+    // Handle existing position
+    if (existingEthPosition) {
+      const currentPositionDirection = existingEthPosition.side === "long" ? "buy" : "sell"
+      
+      if (currentPositionDirection === direction) {
+        console.log(`Already have a ${direction} position open for ETH, not placing new order`)
+        return
+      } else {
+        console.log(`Closing existing ${currentPositionDirection} position before opening ${direction} position`)
+        // Close the existing position - opposite of current position direction
+        const closeDirection = currentPositionDirection === "buy" ? "sell" : "buy"
+        const closeResult = await placeOrder(closeDirection, existingEthPosition.size, true)
+        
+        console.log(`Closed position result: ${JSON.stringify(closeResult)}`)
+        
+        // Wait a moment for the close to process
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
+    } */
     
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-    const orderResult = await placeOrder(direction, 0.001, { trailingStop: 0.04 }) // 0.1 ETH position size with 4% trailing stop
+    const orderResult = await placeOrder(direction, 0.1, false) // 0.1 ETH position size with 4% trailing stop
     
     // Record the signal and order in the database
     await db.collection('trading_signals').insertOne({

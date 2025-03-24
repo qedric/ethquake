@@ -103,7 +103,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
   let newTransactions = []
   
   // Process addresses in chunks because the API has limits
-  const chunkSize = 20
+  const chunkSize = 12
   let processedAddressesCount = 0
   
   // Clear line and write initial status
