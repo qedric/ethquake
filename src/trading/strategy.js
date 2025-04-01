@@ -33,23 +33,29 @@ export async function executeTradeStrategy() {
       }
     }
     
-    // Get the last two hours of analysis results
-    const now = new Date()
-    const twoHoursAgo = new Date(now)
-    twoHoursAgo.setHours(twoHoursAgo.getHours() - 2)
-    
+    // Instead of time-based query, get the two most recent records directly
     const recentResults = await db.collection('transactions_per_hour')
-      .find({ 
-        timestamp: { $gte: twoHoursAgo, $lte: now }
-      })
-      .sort({ timestamp: 1 }) 
-      .limit(2) // Just get the two most recent records
+      .find({})
+      .sort({ timestamp: -1 }) // descending order to get most recent first
+      .limit(2)
       .toArray()
+
+    // Sort back into ascending order for our logic
+    recentResults.sort((a, b) => a.timestamp - b.timestamp)
 
     console.log('recent results:', recentResults)
     
     if (recentResults.length < 2) {
       console.log('Not enough analysis data to make trading decisions')
+      return
+    }
+    
+    // Check if most recent record was created within last 30 minutes
+    const mostRecentRecord = recentResults[1]
+    const fifteenMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+
+    if (mostRecentRecord.created_at < fifteenMinutesAgo) {
+      console.log('Most recent record is too old:', mostRecentRecord.created_at)
       return
     }
     
