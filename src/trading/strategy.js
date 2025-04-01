@@ -45,6 +45,8 @@ export async function executeTradeStrategy() {
       .sort({ timestamp: 1 }) 
       .limit(2) // Just get the two most recent records
       .toArray()
+
+    console.log('recent results:', recentResults)
     
     if (recentResults.length < 2) {
       console.log('Not enough analysis data to make trading decisions')
@@ -57,8 +59,8 @@ export async function executeTradeStrategy() {
     let signalHour = null
     
     for (let i = 1; i < recentResults.length; i++) {
-      if (recentResults[i].count > SIGNAL_THRESHOLD && 
-          recentResults[i-1].count > SIGNAL_THRESHOLD) {
+      if (recentResults[i].count >= SIGNAL_THRESHOLD && 
+          recentResults[i-1].count >= SIGNAL_THRESHOLD) {
         signalDetected = true
         signalHour = recentResults[i].timestamp
         break
