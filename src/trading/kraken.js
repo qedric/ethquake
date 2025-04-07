@@ -121,7 +121,6 @@ export async function getOpenPositions() {
 
   const nonce = Date.now().toString()
   const signature = getKrakenSignature('/api/v3/openpositions', nonce, '{}')
-  console.log(`Authent: ${signature}`)
 
   let config = {
     method: 'get',
