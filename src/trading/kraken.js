@@ -32,7 +32,6 @@ async function sendOrder(payload) {
   const payloadString = querystring.stringify(payload)
 
   const signature = getKrakenSignature('/api/v3/sendorder', nonce, payloadString)
-  console.log(`Authent: ${signature}`)
 
   let config = {
     method: 'POST',
@@ -95,7 +94,7 @@ export async function placeOrder(side, size, marketOnly) {
       let trailingStopOrderResult = null
       if(!marketOnly){
         trailingStopOrderResult = await sendOrder(trailingStopOrderData)
-        console.log('trailingStopOrderResult:', trailingStopOrderResult)
+        console.log('trailingStopOrderResult:', trailingStopOrderResult.data)
       }
 
       return {
