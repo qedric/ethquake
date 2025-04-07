@@ -88,7 +88,7 @@ export async function placeOrder(side, size, marketOnly) {
 
     const marketOrderResult = await sendOrder(marketOrderData)
 
-    console.log('marketOrderResult:', marketOrderResult)
+    console.log('marketOrderResult:', marketOrderResult.data)
 
     if (marketOrderResult.data.result === 'success') {
 
