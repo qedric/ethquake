@@ -2,7 +2,7 @@ import { getDb , connectToDatabase } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
 
-const COOLDOWN_HOURS = 6
+const COOLDOWN_HOURS = 24
 const SIGNAL_THRESHOLD = 20
 const POSITION_SIZE = 0.5
 
