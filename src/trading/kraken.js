@@ -141,3 +141,39 @@ export async function getOpenPositions() {
   }
 
 }
+
+export async function getOrderStatus(orderId) {
+  if (!API_KEY || !API_SECRET) {
+    throw new Error('Kraken API credentials not configured')
+  }
+
+  const nonce = Date.now().toString()
+  const data = JSON.stringify({
+    orderIds: [orderId]
+  })
+  const signature = getKrakenSignature('/api/v3/orders/status', nonce, data)
+
+  let config = {
+    method: 'POST',
+    maxBodyLength: Infinity,
+    url: 'https://futures.kraken.com/derivatives/api/v3/orders/status',
+    headers: {
+      'Content-Type': 'application/json',
+      'APIKey': API_KEY,
+      'Authent': signature,
+      'Nonce': nonce,
+    },
+    data: data
+  }
+
+  try {
+    const response = await axios.request(config)
+    if (response.data.result === 'success' && response.data.orders?.length > 0) {
+      return response.data.orders[0]
+    }
+    throw new Error('Order not found or invalid response')
+  } catch (error) {
+    console.error('API Error:', error.response?.data || error.message)
+    throw error
+  }
+}
