@@ -4,6 +4,7 @@ import { getTechnicalIndicators } from './indicators.js'
 
 const COOLDOWN_HOURS = 6
 const SIGNAL_THRESHOLD = 20
+const POSITION_SIZE = 0.5
 
 /**
  * Executes the trading strategy based on:
@@ -135,7 +136,7 @@ export async function executeTradeStrategy() {
     
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-    const orderResult = await placeOrder(direction, 0.1, false) // 0.1 ETH position size with 4% trailing stop
+    const orderResult = await placeOrder(direction, POSITION_SIZE, false) // ETH position with 4% trailing stop
     
     // Record the signal and order in the database
     await db.collection('trading_signals').insertOne({
