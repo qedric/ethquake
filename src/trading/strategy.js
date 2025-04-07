@@ -127,8 +127,11 @@ export async function executeTradeStrategy() {
       created_at: new Date(),
       direction: direction,
       ema_data: indicators,
-      order_id: orderResult?.orderId || null,
-      status: orderResult?.status || 'failed',
+      market_order_id: orderResult?.marketOrder?.sendStatus?.order_id || null,
+      market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
+      trailing_stop_order_id: orderResult?.trailingStopOrder?.sendStatus?.order_id || null,
+      trailing_stop_status: orderResult?.trailingStopOrder?.sendStatus?.status || 'failed',
+      result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
     
