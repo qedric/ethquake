@@ -50,17 +50,16 @@ export async function executeTradeStrategy() {
       return
     }
     
-    // Check if most recent record was created within last 30 minutes
+    // Check if most recent record was updated within last 30 minutes
     const mostRecentRecord = recentResults[1]
     const fifteenMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
 
-    if (mostRecentRecord.created_at < fifteenMinutesAgo) {
-      console.log('Most recent record is too old:', mostRecentRecord.created_at)
+    if (mostRecentRecord.updated_at < fifteenMinutesAgo) {
+      console.log('Most recent record is too old:', mostRecentRecord.updated_at)
       return
     }
     
     // Check for signal - two consecutive hours with counts over 20
-    const SIGNAL_THRESHOLD = 20
     let signalDetected = false
     let signalHour = null
     
