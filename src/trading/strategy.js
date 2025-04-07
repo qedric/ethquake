@@ -2,6 +2,9 @@ import { getDb , connectToDatabase } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
 
+const COOLDOWN_HOURS = 6
+const SIGNAL_THRESHOLD = 20
+
 /**
  * Executes the trading strategy based on:
  * 1. Ethquake signals (address activity spikes)
@@ -31,6 +34,19 @@ export async function executeTradeStrategy() {
         // Wait a bit before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * connectionAttempts))
       }
+    }
+    
+    // Check for any trades within cooldown period
+    const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
+    const recentTrades = await db.collection('trading_signals')
+      .find({
+        created_at: { $gte: cooldownStart }
+      })
+      .toArray()
+
+    if (recentTrades.length > 0) {
+      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
+      return
     }
     
     // Instead of time-based query, get the two most recent records directly
