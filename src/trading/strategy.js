@@ -114,37 +114,8 @@ export async function executeTradeStrategy() {
       return
     }
 
-    // Get open positions
-    /* const openPositionsResponse = await getOpenPositions()
-    console.log('open positions:', openPositionsResponse)
     
-    // Check if we have an open ETH position
-    let existingEthPosition = null
-    if (openPositionsResponse?.result === "success" && openPositionsResponse.openPositions) {
-      existingEthPosition = openPositionsResponse.openPositions.find(
-        position => position.symbol === "PF_ETHUSD"
-      )
-    }
     
-    // Handle existing position
-    if (existingEthPosition) {
-      const currentPositionDirection = existingEthPosition.side === "long" ? "buy" : "sell"
-      
-      if (currentPositionDirection === direction) {
-        console.log(`Already have a ${direction} position open for ETH, not placing new order`)
-        return
-      } else {
-        console.log(`Closing existing ${currentPositionDirection} position before opening ${direction} position`)
-        // Close the existing position - opposite of current position direction
-        const closeDirection = currentPositionDirection === "buy" ? "sell" : "buy"
-        const closeResult = await placeOrder(closeDirection, existingEthPosition.size, true)
-        
-        console.log(`Closed position result: ${JSON.stringify(closeResult)}`)
-        
-        // Wait a moment for the close to process
-        await new Promise(resolve => setTimeout(resolve, 1000))
-      }
-    } */
     
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
