@@ -103,7 +103,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
   let newTransactions = []
   
   // Process addresses in chunks because the API has limits
-  const chunkSize = 10
+  const chunkSize = 20
   let processedAddressesCount = 0
   
   // Clear line and write initial status
@@ -166,6 +166,11 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
     // Update the status line with current progress
     process.stdout.write('\r\x1b[K') // Clear the current line
     process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}`)
+    
+    // Wait 1 second before processing the next chunk to avoid rate limiting
+    if (i + chunkSize < addressesOfInterest.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
   }
   
   // Move to new line after the progress updates
