@@ -136,6 +136,12 @@
     // Fetch data and create chart
     async function fetchDataAndChart() {
       try {
+        // Destroy existing chart if it exists
+        if (chartInstance) {
+          chartInstance.destroy()
+          chartInstance = null
+        }
+
         const response = await fetch('/api/transactions/hourly');
         if (!response.ok) throw new Error('Network response was not ok');
         
