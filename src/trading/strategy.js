@@ -4,7 +4,7 @@ import { getTechnicalIndicators } from './indicators.js'
 
 const COOLDOWN_HOURS = 48
 const SIGNAL_THRESHOLD = 20
-const POSITION_SIZE = 1
+const POSITION_SIZE = 1.5
 
 /**
  * Executes the trading strategy based on:
