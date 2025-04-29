@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { fetchTransactions } from '../lib/getTWTransactions.js'
 import { getDb } from '../lib/mongodb.js'
+import { getBlockNumberFromTimestamp } from '../lib/getBlockNumberFromTimestamp.js'
 
 /**
  * Updates transactions for addresses of interest by fetching new ones since the latest block in the existing data.
@@ -44,12 +45,20 @@ const WEI_TO_ETH = 1e18
  * Updates transactions for addresses of interest by fetching new ones since the specified block
  * 
  * @param {number} minEthValue - Minimum transaction value in ETH to include
- * @param {number} [startBlockNumber] - Optional block number to start from. If omitted, uses latest block in DB.
+ * @param {number} [fromTimestamp] - Optional start timestamp in seconds
+ * @param {number} [toTimestamp] - Optional end timestamp in seconds
+ * @param {Object} [existingDb] - Optional existing MongoDB connection
  * @returns {Object} Object containing counts of all transactions and new transactions added
  */
-async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN_ETH, startBlockNumber = null) {
+async function updateTransactionsByAddressesOfInterest(
+  minEthValue = DEFAULT_MIN_ETH,
+  fromTimestamp = null,
+  toTimestamp = null,
+  existingDb = null
+) {
   // Get MongoDB connection
-  const db = await getDb()
+  const db = existingDb || await getDb()
+  const shouldCloseConnection = !existingDb
   
   // Load existing transaction data from MongoDB
   console.log('Reading existing transaction data from MongoDB...')
@@ -63,21 +72,26 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
     throw new Error(`Failed to read existing transactions: ${error.message}`)
   }
 
-  // Determine block number to start from
-  let latestBlockNumber = 0
+  // Determine block numbers from timestamps if provided
+  let startBlockNumber = null
+  let endBlockNumber = null
   
-  if (startBlockNumber !== null) {
-    // User provided a specific block number to start from
-    latestBlockNumber = startBlockNumber
-    console.log(`Using provided start block number: ${latestBlockNumber}`)
+  if (fromTimestamp) {
+    startBlockNumber = await getBlockNumberFromTimestamp(fromTimestamp)
+    console.log(`Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`)
   } else if (existingTransactions.length > 0) {
     // Find the highest block_number from existing transactions
-    latestBlockNumber = Math.max(...existingTransactions.map(tx => parseInt(tx.block_number)))
-    console.log(`Latest block number in existing data: ${latestBlockNumber}`)
+    startBlockNumber = Math.max(...existingTransactions.map(tx => parseInt(tx.block_number)))
+    console.log(`Latest block number in existing data: ${startBlockNumber}`)
   } else {
-    // If there are no transactions yet and no start block was provided, we need to abort
-    console.log('No existing transactions found in MongoDB and no start block provided.')
-    throw new Error('Cannot determine start block. Please provide a start block number.')
+    // If there are no transactions yet and no start timestamp was provided, we need to abort
+    console.log('No existing transactions found in MongoDB and no start timestamp provided.')
+    throw new Error('Cannot determine start block. Please provide a start timestamp.')
+  }
+
+  if (toTimestamp) {
+    endBlockNumber = await getBlockNumberFromTimestamp(toTimestamp)
+    console.log(`Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`)
   }
 
   // Load addresses of interest from MongoDB
@@ -97,13 +111,13 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
   }
 
   // Fetch new transactions for all addresses
-  console.log(`Fetching new transactions since block ${latestBlockNumber} for ${addressesOfInterest.length} addresses...`)
+  console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockNumber} for ${addressesOfInterest.length} addresses...`)
   
   const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH)
   let newTransactions = []
   
   // Process addresses in chunks because the API has limits
-  const chunkSize = 20
+  const chunkSize = 50
   let processedAddressesCount = 0
   
   // Clear line and write initial status
@@ -120,7 +134,8 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
       // Need to check for both sending and receiving transactions
       const fromPromise = fetchTransactions({
         filter_from_address: address,
-        filter_block_number_gt: latestBlockNumber,
+        filter_block_number_gt: startBlockNumber,
+        filter_block_number_lte: endBlockNumber,
         filter_value_gte: minWeiValue.toString()
       }).then(txs => txs.map(tx => ({
         hash: tx.hash,
@@ -137,7 +152,8 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
       
       const toPromise = fetchTransactions({
         filter_to_address: address,
-        filter_block_number_gt: latestBlockNumber,
+        filter_block_number_gt: startBlockNumber,
+        filter_block_number_lte: endBlockNumber,
         filter_value_gte: minWeiValue.toString()
       }).then(txs => txs.map(tx => ({
         hash: tx.hash,
@@ -246,7 +262,8 @@ async function saveTransactionsToMongo(transactions, collectionName = 'transacti
 // Run the script if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   const minEthValue = process.argv[2] ? parseInt(process.argv[2]) : DEFAULT_MIN_ETH
-  const startBlockNumber = process.argv[3] ? parseInt(process.argv[3]) : null
+  const fromTimestamp = process.argv[3] ? parseInt(process.argv[3]) : null
+  const toTimestamp = process.argv[4] ? parseInt(process.argv[4]) : null
   
   let client // Store the MongoDB client for closing
   
@@ -254,14 +271,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .then(db => {
       // Store reference to client for later closing
       client = db.client
-      return updateTransactionsByAddressesOfInterest(minEthValue, startBlockNumber)
+      return updateTransactionsByAddressesOfInterest(minEthValue, fromTimestamp, toTimestamp, db)
     })
     .then(({ newTransactionsCount, allTransactionsCount }) => {
       console.log(`Done! Added ${newTransactionsCount} new transactions. Total: ${allTransactionsCount}`)
     })
     .catch(err => {
       console.error('Failed to update transactions:', err)
-      process.exit(1) // This won't actually exit if the connection is still open
+      process.exit(1)
     })
     .finally(() => {
       // Close the MongoDB connection to allow the process to exit

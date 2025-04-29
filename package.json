@@ -9,7 +9,11 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prelint": "echo 'Running ESLint...'",
-    "prepublish": "npm run lint"
+    "prepublish": "npm run lint",
+    "add-timestamps": "node src/scripts/maintenance.js add-timestamps",
+    "get-new-addresses": "node src/scripts/maintenance.js get-new-addresses",
+    "cleanup-addresses": "node src/scripts/cleanup.js",
+    "run-pipeline-b": "node src/scripts/runPipelineB.js"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +25,8 @@
     "express": "^4.18.2",
     "express-basic-auth": "^1.2.1",
     "mongodb": "^6.14.2",
-    "node-cron": "^3.0.2"
+    "node-cron": "^3.0.2",
+    "thirdweb": "^5.96.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

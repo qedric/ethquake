@@ -56,12 +56,12 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     // Format the results for display (only for console output)
     const output = results.map(r => {
       const date = new Date(r._id.hourDate)
-      // Format DD/MM/YY
-      const day = date.getDate().toString().padStart(2, '0')
-      const month = (date.getMonth() + 1).toString().padStart(2, '0')
-      const year = date.getFullYear().toString().substring(2)
-      // Format HH
-      const hour = date.getHours().toString().padStart(2, '0')
+      // Format DD/MM/YY in UTC
+      const day = date.getUTCDate().toString().padStart(2, '0')
+      const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
+      const year = date.getUTCFullYear().toString().substring(2)
+      // Format HH in UTC
+      const hour = date.getUTCHours().toString().padStart(2, '0')
       
       return `${day}/${month}/${year} - ${hour},${r.count}`
     })

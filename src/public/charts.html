@@ -21,7 +21,7 @@
       padding: 20px;
       border-radius: 8px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      height: 60vh; /* Make chart container taller */
+      height: 60vh;
     }
     h1 {
       text-align: center;
@@ -62,6 +62,11 @@
     button:hover {
       background-color: #45a049;
     }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
   </style>
 </head>
 <body>
@@ -73,6 +78,11 @@
       <input type="range" id="thresholdSlider" min="0" max="100" value="0" step="1">
     </div>
     
+    <div class="checkbox-group">
+      <input type="checkbox" id="showTestData">
+      <label for="showTestData">Show Test Data</label>
+    </div>
+    
     <button id="resetZoom">Reset Zoom</button>
     <button id="refreshChart">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -82,88 +92,143 @@
     </button>
   </div>
 
-  
-  
   <div class="chart-container">
     <canvas id="txChart"></canvas>
   </div>
 
   <script>
     // Global variables
-    let chartInstance = null;
-    let originalData = [];
+    let chartInstance = null
+    let originalData = []
+    let testData = []
     let isMobile = window.innerWidth < 768
     
-    // Update threshold display
-    const thresholdSlider = document.getElementById('thresholdSlider');
-    const thresholdValue = document.getElementById('thresholdValue');
+    // Controls
+    const thresholdSlider = document.getElementById('thresholdSlider')
+    const thresholdValue = document.getElementById('thresholdValue')
+    const showTestDataCheckbox = document.getElementById('showTestData')
     
     thresholdSlider.addEventListener('input', function() {
-      thresholdValue.textContent = this.value;
-      updateChartWithThreshold(Number(this.value));
-    });
+      thresholdValue.textContent = this.value
+      updateChartWithThreshold(Number(this.value))
+    })
     
-    // Reset zoom button
+    showTestDataCheckbox.addEventListener('change', function() {
+      updateChartWithThreshold(Number(thresholdSlider.value))
+    })
+    
     document.getElementById('resetZoom').addEventListener('click', function() {
       if (chartInstance) {
-        chartInstance.resetZoom();
+        chartInstance.resetZoom()
       }
-    });
+    })
     
-    // Refresh chart button
     document.getElementById('refreshChart').addEventListener('click', function() {
-      fetchDataAndChart();
-    });
+      fetchDataAndChart()
+    })
     
-    // Filter data based on threshold
     function updateChartWithThreshold(threshold) {
-      if (!chartInstance || !originalData.length) return;
+      if (!chartInstance || !originalData.length) return
       
       const filteredData = originalData.map(item => {
-        // If count is below threshold, return null to hide the bar
-        // but keep the label position
-        return item.count >= threshold ? item.count : null;
-      });
+        return item.count >= threshold ? item.count : null
+      })
       
-      chartInstance.data.datasets[0].data = filteredData;
+      const filteredTestData = testData.map(item => {
+        return item.count >= threshold ? item.count : null
+      })
+      
+      chartInstance.data.datasets[0].data = filteredData
+      
+      if (showTestDataCheckbox.checked) {
+        if (chartInstance.data.datasets.length === 1) {
+          // Add test data dataset if it doesn't exist
+          chartInstance.data.datasets.push({
+            label: 'Test Data',
+            data: filteredTestData,
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          })
+        } else {
+          // Update existing test data
+          chartInstance.data.datasets[1].data = filteredTestData
+        }
+      } else {
+        // Remove test data dataset if it exists
+        if (chartInstance.data.datasets.length > 1) {
+          chartInstance.data.datasets.pop()
+        }
+      }
       
       // Update y-axis to start from threshold
-      chartInstance.options.scales.y.min = threshold > 0 ? threshold : 0;
+      chartInstance.options.scales.y.min = threshold > 0 ? threshold : 0
       
-      chartInstance.update();
+      chartInstance.update()
     }
     
-    // Fetch data and create chart
     async function fetchDataAndChart() {
       try {
-        // Destroy existing chart if it exists
         if (chartInstance) {
           chartInstance.destroy()
           chartInstance = null
         }
 
-        const response = await fetch('/api/transactions/hourly');
-        if (!response.ok) throw new Error('Network response was not ok');
+        // Fetch both production and test data
+        const [prodResponse, testResponse] = await Promise.all([
+          fetch('/api/transactions/hourly'),
+          fetch('/api/transactions/hourly?db=ethquake_b')
+        ])
         
-        const data = await response.json();
-        originalData = data; // Store original data for filtering
+        if (!prodResponse.ok || !testResponse.ok) throw new Error('Network response was not ok')
         
-        // Format data for Chart.js
-        const labels = data.map(item => item.displayDateHour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`);
-        const counts = data.map(item => item.count);
+        const [prodData, testDataResponse] = await Promise.all([
+          prodResponse.json(),
+          testResponse.json()
+        ])
         
-        // Find the maximum count to set slider max value
-        const maxCount = Math.max(...counts);
-        thresholdSlider.max = maxCount;
+        originalData = prodData
+        testData = testDataResponse
         
-        // Create chart
-        const ctx = document.getElementById('txChart').getContext('2d');
+        // Pad test data with zero counts from start of production data
+        const prodStartDate = new Date(prodData[0].timestamp)
+        const testStartDate = new Date(testData[0].timestamp)
+        
+        if (prodStartDate < testStartDate) {
+          const paddedTestData = []
+          let currentDate = new Date(prodStartDate)
+          
+          // Add zero counts until we reach the first test data point
+          while (currentDate < testStartDate) {
+            paddedTestData.push({
+              timestamp: new Date(currentDate),
+              hour: currentDate.getUTCHours(),
+              count: 0,
+              displayDateHour: `${currentDate.getUTCDate().toString().padStart(2, '0')}/${(currentDate.getUTCMonth() + 1).toString().padStart(2, '0')}/${currentDate.getUTCFullYear().toString().substring(2)} - ${currentDate.getUTCHours().toString().padStart(2, '0')}`
+            })
+            
+            // Move to next hour
+            currentDate.setUTCHours(currentDate.getUTCHours() + 1)
+          }
+          
+          // Add the actual test data
+          testData = [...paddedTestData, ...testData]
+        }
+        
+        const labels = prodData.map(item => item.displayDateHour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`)
+        const counts = prodData.map(item => item.count)
+        const testCounts = testData.map(item => item.count)
+        
+        const maxCount = Math.max(...counts, ...testCounts)
+        thresholdSlider.max = maxCount
+        
+        const ctx = document.getElementById('txChart').getContext('2d')
         chartInstance = new Chart(ctx, {
           type: 'bar',
           data: {
             labels: labels,
             datasets: [{
-              label: 'Transaction Count',
+              label: 'Production Data',
               data: counts,
               backgroundColor: 'rgba(54, 162, 235, 0.5)',
               borderColor: 'rgba(54, 162, 235, 1)',
@@ -207,7 +272,7 @@
                   text: 'Count'
                 },
                 ticks: {
-                  precision: 0 // Forces integer ticks
+                  precision: 0
                 }
               },
               x: {
@@ -233,9 +298,8 @@
             },
             aspectRatio: isMobile ? 1 : 2
           }
-        });
+        })
         
-        // For mobile, show only last 24 hours by default
         if (isMobile && originalData.length > 24) {
           const dataLength = originalData.length
           chartInstance.zoomScale('x', {
@@ -244,7 +308,6 @@
           }, false)
           chartInstance.update()
         } else if (originalData.length > 24) {
-          // For desktop, show last 50 points
           const dataLength = originalData.length
           const visiblePoints = Math.min(dataLength, 50)
           chartInstance.zoomScale('x', {
@@ -254,14 +317,12 @@
           chartInstance.update()
         }
       } catch (error) {
-        console.error('Error fetching chart data:', error);
+        console.error('Error fetching chart data:', error)
       }
     }
     
-    // Initialize chart on page load
-    document.addEventListener('DOMContentLoaded', fetchDataAndChart);
+    document.addEventListener('DOMContentLoaded', fetchDataAndChart)
     
-    // Handle window resize
     window.addEventListener('resize', function() {
       isMobile = window.innerWidth < 768
     })

@@ -11,14 +11,19 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017'
-const dbName = process.env.MONGO_DB_NAME || 'ethquake'
+const defaultDbName = process.env.MONGO_DB_NAME || 'ethquake'
 
 let client = null
 let db = null
 
-async function connectToDatabase() {
+/**
+ * Connects to MongoDB and returns a database instance
+ * @param {string} [dbName] - Optional database name. If not provided, uses default from env
+ * @returns {Promise<Object>} - Database instance
+ */
+async function connectToDatabase(dbName = defaultDbName) {
   try {
-    console.log('Connecting to MongoDB...')
+    console.log(`Connecting to MongoDB database: ${dbName}...`)
     client = new MongoClient(uri, {
       connectTimeoutMS: 5000,
       socketTimeoutMS: 30000,
@@ -37,6 +42,10 @@ async function connectToDatabase() {
   }
 }
 
+/**
+ * Gets the default database instance
+ * @returns {Promise<Object>} - Database instance
+ */
 async function getDb() {
   if (!db) {
     db = await connectToDatabase()

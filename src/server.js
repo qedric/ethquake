@@ -4,6 +4,7 @@ import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransac
 import { countTransactionsByHour } from './scripts/txCountByHour.js'
 import { executeTradeStrategy } from './trading/strategy.js'
 import { getDb, connectToDatabase, logActivity } from './lib/mongodb.js'
+import { selectDatabase } from './lib/dbSelector.js'
 import dotenv from 'dotenv'
 import transactionDataRouter from './api/transactionData.js'
 import visualizationRouter from './api/visualizationRouter.js'
@@ -69,15 +70,19 @@ process.on('SIGTERM', () => {
 // Keep the process alive with proper initialization
 async function startServer() {
   try {
+    // Select database in development mode
+    const dbName = await selectDatabase()
+    
     // Connect to MongoDB first
-    await connectToDatabase()
+    await connectToDatabase(dbName)
     
     // Start Express server
     server = app.listen(PORT, () => {
       console.log(`Ethquake Server running on port ${PORT}.`)
       logActivity({
         type: 'SERVER_START',
-        port: PORT
+        port: PORT,
+        database: dbName
       }).catch(err => console.error('Failed to log server start:', err))
     })
 
