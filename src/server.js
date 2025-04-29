@@ -147,19 +147,27 @@ async function runDataPipelineTask() {
   console.log('Running data pipeline task:', new Date().toISOString())
   
   try {
+    // Get the current database connection
+    const db = await getDb()
+    const client = db.client
+    
     // Update transactions data
     console.log('Updating transactions data...')
-    const txResult = await updateTransactionsByAddressesOfInterest()
+    const txResult = await updateTransactionsByAddressesOfInterest(db, client)
     console.log(`Added ${txResult.newTransactionsCount} new transactions`)
     
     // Run analysis
     console.log('Running transaction analysis...')
-    const analysisResults = await countTransactionsByHour()
+    const analysisResults = await countTransactionsByHour(db, client)
     console.log(`Analysis complete with ${analysisResults?.length || 0} hourly results`)
     
-    // Execute trading strategy based on the latest analysis
-    console.log('Executing trading strategy...')
-    await executeTradeStrategy()
+    // Only execute trading strategy in production
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Executing trading strategy...')
+      await executeTradeStrategy()
+    } else {
+      console.log('Skipping trading strategy in non-production environment')
+    }
     
     return { success: true }
   } catch (error) {
