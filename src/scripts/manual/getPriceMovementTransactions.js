@@ -5,7 +5,6 @@ import dotenv from 'dotenv'
 import { fetchTransactions } from '../lib/getTWTransactions'
 
 /* 
-
     For step 2 (transactions before price movements):
     node src/getTransactions.js target percentage_price_movements_timestamps/6.json
 
@@ -14,7 +13,6 @@ import { fetchTransactions } from '../lib/getTWTransactions'
 
     You can also specify a custom lookback period (in hours) as an optional fourth argument:
     node src/getTransactions.js target percentage_price_movements_timestamps/6.json 2
-
 */
 
 // Initialize dotenv

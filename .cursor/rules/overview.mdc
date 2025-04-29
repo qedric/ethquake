@@ -1,33 +1,91 @@
 ---
-description: Project Overview
-globs: *.js, *.json
+description: 
+globs: 
+alwaysApply: true
 ---
+# overview: ETHQuake forewarns of impending large price movements in ETHUSD.
 
-# Phase one: automate data collection
+ETHQuake works by monitoring transactions which involve addresses of interest, that tend to increase activity before large market movements (see Maintenance CLI section for information on maintaining this list of addresses of interest). Our server periodically queries the blockchain to see how many addresses of interest made transactions having a value greater or equal to a given amount (default 100 ETH). We keep track of the number of these transactions per hour (queried every 15 min by default).
 
-In a given time period (for example 3 months):
+The results are made available via our /charts web endpoint, in a simple chart. 
 
-1. Identify timestamps where ETHUSD price moved more than n%
-2. Identify all transactions >= 100 ETH in the hour leading up to each price movement
-3. Identify transactions >= 100 ETH during flat normal trading ranges, as a control group
-4. Identify all sending & receiving addresses from step 2, that do not appear in any transactions from step 3.
-5. For each address identified in step 4, list all tx’s >= 100 ETH
-6. plot all transactions from step 5, grouped by hour
-7. chart by count of address instances per hourThe higher the count, the more likely a large price movement is imminent
+If the number of transactions within a given period cross a given threshold then it will trigger the automated trading component. At the time of writing, we're set up to trigger the trade signal if there are two consecutive hours each having more than 20 transactions. This means that the soonest a trade signall will trigger is if there was a 1 hour period having >= 20 transactions followed by an additional 20 transactions in the next 15min (because we're currently querying every 15 min).
+
+If a trade signal is detected, then we need to determine the direction. This is currently done by checking if moving averages are trending up or down. If there's a trend we proceed, otherwise no action. 
+
+If we proceed then we open a trade for a given amount, with a trailing stop at a given distance (at the time of writing, the trailing stop is set to 4%).
+
+Once a trade opens, we activate a cool-down period (currently 48 hours) during which time no additional trades will be made.
+
+Maintaining and closing of the position is outside the scope of this project.
+
+# Maintenance CLI
+
+Our list of 'addresses_of_interest' is the crucial ingredient. These addresses change over time and must be kept up-to-date.
+
+An update should ideally happen after each large movement, and because this happens infrequently we will trigger this manually via a simple CLI.
+
+The process is as-follows:
+
+1. Identify timestamps where ETHUSD price moved more than n% (done manually, not in scope of this project)
+2. Identify random timestamps of normal trading activity, as a control group
+3. Identify transactions >= 100 ETH in the hour leading up to each large price movement
+4. Identify transactions >= 100 ETH in the hour leading up to each control group timestamp
+5. Identify all sending & receiving addresses from step 3, that do NOT appear in any transactions from step 4.
+
+To achieve this, we will maintain two collections in the mongodb
+- 'price_movements'
+- 'addresses_of_interest'
+
+Our CLI will accept the following commands:
+- add-timestamp: accept a new UNIX timestamp as a parameter, and enter it into the 'price_movements' collection. Each document in the collection will include the integer timestamp as entered, and its corresponding date formatted using UTC. Additional fields may be necessary in order to keep track of which price movements have been processed to update the addresses of interest.
+- get-new-addresses: This will automate steps 2 to 5 for each new timestamp, and enter any new addresses into the 'addresses_of_interest' collection. Each entry in the collection will contain the address field, and will also keep track of how many transactions this address has appeared in as the receiver and how many as the sender in each price movement window identified in step 1.
+
+Much of the logic to query for transactions has been done previously for manual JSON based processing and we can re-purpose it. Refer to [getPriceMovementTransactions.js](mdc:src/scripts/manual/getPriceMovementTransactions.js) and [adresses_of_interest.js](mdc:src/scripts/manual/adresses_of_interest.js)
 
 ## Details for each step:
 
 ### 1. Price movement identifaction
-I've already written a pinescript, @largePriceMovements.pine, and used it to output a list of timestamps on the hourly timeframe, for 6%, 8%, and 10% movements - you can find these in data/percentage_price_movements_timestamps
+I've written a pinescript, @largePriceMovements.pine, and use it to output a list of timestamps on the hourly timeframe, for n% movements
 
 ### 2. Transaction Collection leading up to price movement
 Here we use thirdweb's insight api, we can adapt the uri:
 
 `https://insight.thirdweb.com/v1/transactions?chain=1&filter_block_timestamp_gte=${start_timestamp}&filter_block_timestamp_lte=${end_timestamp}&sort_by=block_number&sort_order=desc&filter_value_gte=100000000000000000000&limit=200&clientId=${process.env.TW_CLIENT_ID}`
 
-You just need to define start_timestamp and end_timestamp, where start should be 1 hour before the timestamp picked up in step 1.
+We have implemented the fetchTransactions fn in [getTWTransactions.js](mdc:src/lib/getTWTransactions.js) that can be used for this.
 
-This is the schema of the response from this api call:
+- end_timestamp should be the timestamp picked up in step 1, and start_timestamp should be 1 hour before.
+- check references section for the reponse schema
+
+### 3. Transaction Collection for control group
+Randomly select an equal number of timestamps to be processed, distributed evenly between the timestamps provided in step 1. These will not be large price movements, and we can assume that these will reveal regualar market activity. Run the same api call to gather all Txs (up to a max of 200) having a value >= 100ETH
+
+### 4. Identify 'addresses of interest'
+Identify all addresses in the "to_address" and "from_address" fields of the transactions that appear in our target group that DO NOT appear in our control group. Add these to our mongoDB collection along with their stats mentioned above.
+
+# Notes
+
+## hosting
+We're using Railway for our trade and web server.
+
+## database
+You can grab the mongodb client at any time from @mongodb.js.
+
+## conventions
+- Values like >= 100 ETH are to be considered default values and parameterized.
+- Please use imports not require. 
+- please don't use semicolons
+- please only include helpful explanatory and professional comments in the code itself - no smart remarks or sarcasm.
+- ALL dates and times are in UTC.
+
+# references:
+
+## Kraken Futures API documentation:
+
+https://docs.kraken.com/api/docs/websocket-v2/add_order/
+
+## the schema of the response for the insights api call:
 
 `{
   "meta": {
@@ -73,89 +131,6 @@ This is the schema of the response from this api call:
     {...}
   ]
 }`
-
-### 3. Transaction Collection for control group
-Randomly select an equal number of timestamps distributed evenly between the timestamps provided in step 1. These will not be large price movements, and we can assume that these will reveal regualar market activity. Run the same api call to gather all Txs (up to a max of 200) with a value >= 100ETH
-
-### 4. Identify 'addresses of interest'
-Identify all addresses in the "to_address" and "from_address" fields of the transactions that appear in our target group (transactions gathered in step 2) that DO NOT appear in our control group (transactions gathered in step 3)
-
-### 5. Transaction collection for addresses of interest
-For each 'address of interest' from step 4, run the api call above, this time from the earliest timestamp in our range from step 1, up to the present, identifying all transasctions by each address having a value >= 100 ETH. That means for each address we will need w api calls - one using filter_to_address and the other using filter_from_address.
-
-This will result in a large list of transactions. as a potentially valuable byproduct, we can seperate all the addresses found in either the to address or the from address, that DO NOT appear in our list of 'addresses of interest' from step 4. Each of these addresses has either sent to or received from an address of interest and therefore can be subject to future analysis.
-
-### 6. Plotting results
-Produce a table of of every transaction ordered by timestamp. This table should have the following properties: 
-
- - the table columns will be: timestamp, dateTime (ddMMYY HH:mm:ss), fromAddress, toAddress
-
-### 7. Export to google sheets
-Produce a google sheet with suite of charting and analysis so we can do things like:
- - group transactions by time period (15m, 1hr, 4hr, 1day)
- - isolate and find associations between addresses
-
-#Phase two: produce indicator using the above data, for use in TradingView. Let's worry about this later.
-
-# Notes
-## Database
-We have a mongodb instance set up. You can grab the client at any time from @mongodb.js.
-We can keep data locally in json files, or use mongodb when appropriate.
-
-## Conventions
-Values like >= 100 ETH are to be considered default values and parameterized. 
-Please use imports not require. 
-please don't use semicolons
-please only include helpful explanatory comments in the code itself. 
-
-# Phase two: automate trading
-
-Here is the link to the Kraken Futures API documentation:
-https://docs.kraken.com/api/docs/websocket-v2/add_order/
-
-I also have a TradingView account. 
-
-I'd like to enter trades based on the indicator developed in this project, in tandem with a small number of other indicators, probably Moving Averages to determine likely direction.
-
-Ethquake Indicator: 
-
-The [txCountByHour.js](mdc:src/scripts/txCountByHour.js) script returns data that looks like this: 
-
-`
-10/03/25 - 06,7
-10/03/25 - 07,7
-10/03/25 - 08,9
-10/03/25 - 09,21
-10/03/25 - 10,22
-10/03/25 - 11,12
-10/03/25 - 12,28
-10/03/25 - 13,14
-10/03/25 - 14,35
-10/03/25 - 15,25
-10/03/25 - 16,22
-10/03/25 - 17,196
-10/03/25 - 18,72
-10/03/25 - 19,63
-10/03/25 - 20,60
-10/03/25 - 21,42
-10/03/25 - 22,21
-`
-
-I want to use a simple algorithm where if there are two consecutive values over 20, (we can tweak all the values), then this is an enter signal. 
-
-We then use 20, 50, 100, and 200 EMAs on the Hourly to determine the direction. 
-
-
-## migrate JSON to mongoDB
-
-collections:
-transactions - Raw transaction data from ThirdWeb
-addresses_of_interest - Your special addresses that precede price movements
-analysis_results - Your hourly aggregated counts
-price_movements - Timestamps of significant ETH price movements - do we need this?
-trading_signals - Generated signals and their status - 
-
-Decision: using Railway for our trade server. 
 
 
 
