@@ -29,12 +29,12 @@ async function runPipelineB(fromTimestamp = null, toTimestamp = null) {
     
     // Update transactions data using collection B
     console.log('Updating transactions data for collection B...')
-    const txResult = await updateTransactionsByAddressesOfInterest(
-      process.env.MIN_ETH_VALUE || 100,
+    const txResult = await updateTransactionsByAddressesOfInterest({
+      minEthValue: process.env.MIN_ETH_VALUE || 100,
       fromTimestamp,
       toTimestamp,
-      db
-    )
+      existingDb: db
+    })
     console.log(`Added ${txResult.newTransactionsCount} new transactions to collection B`)
     
     // Run analysis for collection B

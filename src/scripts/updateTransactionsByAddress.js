@@ -59,8 +59,12 @@ async function updateTransactionsByAddressesOfInterest({
 } = {}) {
   // Get MongoDB connection
   const db = existingDb || await getDb()
+  console.log(`Using database: ${db.databaseName}`)
   const client = existingClient || db.client
   const shouldCloseConnection = !existingDb
+
+  console.log('fromTimestamp:', fromTimestamp)
+  console.log('toTimestamp:', toTimestamp)
   
   // Load existing transaction data from MongoDB
   console.log('Reading existing transaction data from MongoDB...')
@@ -119,7 +123,7 @@ async function updateTransactionsByAddressesOfInterest({
   let newTransactions = []
   
   // Process addresses in chunks because the API has limits
-  const chunkSize = 50
+  const chunkSize = 10
   let processedAddressesCount = 0
   
   // Clear line and write initial status
