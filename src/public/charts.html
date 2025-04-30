@@ -100,7 +100,7 @@
     // Global variables
     let chartInstance = null
     let originalData = []
-    let testData = []
+    let paddedTestData = []
     let isMobile = window.innerWidth < 768
     
     // Controls
@@ -113,7 +113,10 @@
       updateChartWithThreshold(Number(this.value))
     })
     
+    console.log('Attaching event listener to checkbox')
     showTestDataCheckbox.addEventListener('change', function() {
+      console.log('Checkbox state changed')
+      console.log('Threshold slider value:', thresholdSlider.value)
       updateChartWithThreshold(Number(thresholdSlider.value))
     })
     
@@ -128,21 +131,30 @@
     })
     
     function updateChartWithThreshold(threshold) {
+      console.log('updateChartWithThreshold called with threshold:', threshold)
+      console.log('chart instance:', chartInstance)
+      console.log('originalData.length', originalData.length)
+
       if (!chartInstance || !originalData.length) return
       
       const filteredData = originalData.map(item => {
         return item.count >= threshold ? item.count : null
       })
       
-      const filteredTestData = testData.map(item => {
+      const filteredTestData = paddedTestData.map(item => {
         return item.count >= threshold ? item.count : null
       })
       
+      console.log('Filtered Padded Test Data:', filteredTestData)
+      
       chartInstance.data.datasets[0].data = filteredData
       
+      console.log('Padded Test Data:', paddedTestData)
+
       if (showTestDataCheckbox.checked) {
+        console.log('Checkbox is checked, updating chart with padded test data')
         if (chartInstance.data.datasets.length === 1) {
-          // Add test data dataset if it doesn't exist
+          console.log('Adding test data dataset to chart')
           chartInstance.data.datasets.push({
             label: 'Test Data',
             data: filteredTestData,
@@ -151,12 +163,13 @@
             borderWidth: 1
           })
         } else {
-          // Update existing test data
+          console.log('Updating existing test data dataset')
           chartInstance.data.datasets[1].data = filteredTestData
         }
       } else {
-        // Remove test data dataset if it exists
+        console.log('Checkbox is not checked, removing test data from chart')
         if (chartInstance.data.datasets.length > 1) {
+          console.log('Removing test data dataset from chart')
           chartInstance.data.datasets.pop()
         }
       }
@@ -165,6 +178,7 @@
       chartInstance.options.scales.y.min = threshold > 0 ? threshold : 0
       
       chartInstance.update()
+      console.log('Datasets after modification:', chartInstance.data.datasets)
     }
     
     async function fetchDataAndChart() {
@@ -182,39 +196,34 @@
         
         if (!prodResponse.ok || !testResponse.ok) throw new Error('Network response was not ok')
         
-        const [prodData, testDataResponse] = await Promise.all([
+        const [prodData, testData] = await Promise.all([
           prodResponse.json(),
           testResponse.json()
         ])
         
-        originalData = prodData
-        testData = testDataResponse
-        
-        // Pad test data with zero counts from start of production data
-        const prodStartDate = new Date(prodData[0].timestamp)
-        const testStartDate = new Date(testData[0].timestamp)
-        
-        if (prodStartDate < testStartDate) {
-          const paddedTestData = []
-          let currentDate = new Date(prodStartDate)
-          
-          // Add zero counts until we reach the first test data point
-          while (currentDate < testStartDate) {
-            paddedTestData.push({
-              timestamp: new Date(currentDate),
-              hour: currentDate.getUTCHours(),
-              count: 0,
-              displayDateHour: `${currentDate.getUTCDate().toString().padStart(2, '0')}/${(currentDate.getUTCMonth() + 1).toString().padStart(2, '0')}/${currentDate.getUTCFullYear().toString().substring(2)} - ${currentDate.getUTCHours().toString().padStart(2, '0')}`
-            })
-            
-            // Move to next hour
-            currentDate.setUTCHours(currentDate.getUTCHours() + 1)
+        console.log('Production Data Start:', new Date(prodData[0].timestamp).toISOString())
+        console.log('Production Data End:', new Date(prodData[prodData.length - 1].timestamp).toISOString())
+        console.log('Production Data Length:', prodData.length)
+
+        console.log('Test Data Start:', new Date(testData[0].timestamp).toISOString())
+        console.log('Test Data End:', new Date(testData[testData.length - 1].timestamp).toISOString())
+        console.log('Test Data Length:', testData.length)
+
+        console.log('first test record:', testData[0])
+        console.log('last test record:', testData[testData.length - 1])
+
+        console.log('Assigning paddedTestData')
+        paddedTestData = prodData.map(prodEntry => {
+          const match = testData.find(testEntry => testEntry.displayDateHour == prodEntry.displayDateHour)
+          return {
+            count: match ? match.count : 0,
+            displayDateHour: prodEntry.displayDateHour,
+            hour: prodEntry.hour,
+            timestamp: prodEntry.timestamp
           }
-          
-          // Add the actual test data
-          testData = [...paddedTestData, ...testData]
-        }
-        
+        })
+        console.log('paddedTestData assigned:', paddedTestData)
+
         const labels = prodData.map(item => item.displayDateHour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`)
         const counts = prodData.map(item => item.count)
         const testCounts = testData.map(item => item.count)
@@ -223,6 +232,7 @@
         thresholdSlider.max = maxCount
         
         const ctx = document.getElementById('txChart').getContext('2d')
+        console.log('Creating chart instance')
         chartInstance = new Chart(ctx, {
           type: 'bar',
           data: {
@@ -299,6 +309,10 @@
             aspectRatio: isMobile ? 1 : 2
           }
         })
+        console.log('Chart instance created:', chartInstance)
+
+        chartInstance.update()
+        console.log('Chart update called')
         
         if (isMobile && originalData.length > 24) {
           const dataLength = originalData.length
@@ -316,6 +330,13 @@
           }, false)
           chartInstance.update()
         }
+
+        // Update chart after paddedTestData is assigned
+        console.log('Updating chart with new data')
+        updateChartWithThreshold(Number(thresholdSlider.value))
+
+        originalData = prodData
+        console.log('Original Data assigned:', originalData)
       } catch (error) {
         console.error('Error fetching chart data:', error)
       }

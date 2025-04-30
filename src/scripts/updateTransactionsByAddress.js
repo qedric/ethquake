@@ -50,14 +50,16 @@ const WEI_TO_ETH = 1e18
  * @param {Object} [existingDb] - Optional existing MongoDB connection
  * @returns {Object} Object containing counts of all transactions and new transactions added
  */
-async function updateTransactionsByAddressesOfInterest(
+async function updateTransactionsByAddressesOfInterest({
   minEthValue = DEFAULT_MIN_ETH,
   fromTimestamp = null,
   toTimestamp = null,
-  existingDb = null
-) {
+  existingDb = null,
+  existingClient = null
+} = {}) {
   // Get MongoDB connection
   const db = existingDb || await getDb()
+  const client = existingClient || db.client
   const shouldCloseConnection = !existingDb
   
   // Load existing transaction data from MongoDB
@@ -271,7 +273,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .then(db => {
       // Store reference to client for later closing
       client = db.client
-      return updateTransactionsByAddressesOfInterest(minEthValue, fromTimestamp, toTimestamp, db)
+      return updateTransactionsByAddressesOfInterest({ minEthValue, fromTimestamp, toTimestamp, existingDb: db })
     })
     .then(({ newTransactionsCount, allTransactionsCount }) => {
       console.log(`Done! Added ${newTransactionsCount} new transactions. Total: ${allTransactionsCount}`)

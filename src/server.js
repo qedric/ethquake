@@ -153,7 +153,10 @@ async function runDataPipelineTask() {
     
     // Update transactions data
     console.log('Updating transactions data...')
-    const txResult = await updateTransactionsByAddressesOfInterest(db, client)
+    const txResult = await updateTransactionsByAddressesOfInterest({
+      existingDb: db,
+      existingClient: client
+    })
     console.log(`Added ${txResult.newTransactionsCount} new transactions`)
     
     // Run analysis
