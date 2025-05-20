@@ -1,9 +1,11 @@
 import { getDb , connectToDatabase } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
+import { sendAlert } from '../lib/alerts.js'
 
 const COOLDOWN_HOURS = 48
 const SIGNAL_THRESHOLD = 20
+const ALERT_THRESHOLD = 1
 const POSITION_SIZE = 2
 
 /**
@@ -91,6 +93,12 @@ export async function executeTradeStrategy() {
     
     if (!signalDetected) {
       console.log('No trading signal detected in recent data')
+
+      if (recentResults[recentResults.length-1].count >= ALERT_THRESHOLD) {
+        console.log(`Alert threshold triggered: ${recentResults[recentResults.length-1].count}`)
+        sendAlert(`Alert threshold triggered: ${recentResults[recentResults.length-1].count}`)
+      }
+
       return recentResults
     }
     
@@ -114,6 +122,7 @@ export async function executeTradeStrategy() {
     
     if (direction === 'none') {
       console.log('No clear direction from technical indicators, not trading')
+      sendAlert('Signal detected - no clear direction - not trading.')
       return
     }
     
@@ -128,6 +137,7 @@ export async function executeTradeStrategy() {
     
     if (existingSignal) {
       console.log(`Already processed signal for ${signalHour.toISOString()}`)
+      sendAlert('Signal detected - already trading.')
       return
     }
 
@@ -151,6 +161,8 @@ export async function executeTradeStrategy() {
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
+
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult}`)
     
     return {
       signalHour,
