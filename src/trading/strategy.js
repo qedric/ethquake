@@ -5,7 +5,7 @@ import { sendAlert } from '../lib/alerts.js'
 
 const COOLDOWN_HOURS = 48
 const SIGNAL_THRESHOLD = 20
-const ALERT_THRESHOLD = 1
+const ALERT_THRESHOLD = 40
 const POSITION_SIZE = 2
 
 /**
