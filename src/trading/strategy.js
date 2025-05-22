@@ -141,9 +141,6 @@ export async function executeTradeStrategy() {
       return
     }
 
-    
-    
-    
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
     const orderResult = await placeOrder(direction, POSITION_SIZE, false) // ETH position with 4% trailing stop
@@ -162,7 +159,7 @@ export async function executeTradeStrategy() {
       error: orderResult?.error || null
     })
 
-    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult}`)
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nTrailing Stop Order Result: ${orderResult?.trailingStopOrder?.sendStatus?.status || 'failed'}`)
     
     return {
       signalHour,
