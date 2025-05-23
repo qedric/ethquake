@@ -1,5 +1,5 @@
 const TELEGRAM_API_URL = 'https://api.telegram.org/bot'
-const APPROVED_CHAT_IDS = [252360572] // Hard-coded for now, we can move this to a config file later
+const APPROVED_CHAT_IDS = [252360572, 1895974263] // Hard-coded for now, we can move this to a config file later
 
 /**
  * Sends a message to approved Telegram chats
