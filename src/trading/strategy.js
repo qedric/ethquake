@@ -39,19 +39,6 @@ export async function executeTradeStrategy() {
       }
     }
     
-    // Check for any trades within cooldown period
-    const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
-    const recentTrades = await db.collection('trading_signals')
-      .find({
-        created_at: { $gte: cooldownStart }
-      })
-      .toArray()
-
-    if (recentTrades.length > 0) {
-      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
-      return
-    }
-    
     // Instead of time-based query, get the two most recent records directly
     const recentResults = await db.collection('transactions_per_hour')
       .find({})
@@ -103,6 +90,19 @@ export async function executeTradeStrategy() {
     }
     
     console.log(`Signal detected at ${signalHour.toISOString()}`)
+
+    // Check for any trades within cooldown period
+    const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
+    const recentTrades = await db.collection('trading_signals')
+      .find({
+        created_at: { $gte: cooldownStart }
+      })
+      .toArray()
+
+    if (recentTrades.length > 0) {
+      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
+      return
+    }
     
     // Get technical indicators to determine direction
     const indicators = await getTechnicalIndicators()
