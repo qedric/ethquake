@@ -104,15 +104,16 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
  */
 export async function getTechnicalIndicators() {
   try {
-    // For 200 EMA, we want at least 3x that amount of data points for accuracy
-    const prices = await getKrakenOHLCData('ETHUSD', 60, 650)
+    // For 100 EMA on 15min timeframe, we want at least 3x that amount of data points for accuracy
+    // 100 periods * 15min = 1500min = 25 hours, so we'll get 75 hours of data
+    const prices = await getKrakenOHLCData('ETHUSD', 15, 75)
     
     if (!prices || prices.length === 0) {
       throw new Error('Failed to fetch price data from Kraken')
     }
     
-    if (prices.length < 600) {
-      throw new Error(`Not enough price data for reliable EMA calculations: got ${prices.length}, need at least 600`)
+    if (prices.length < 300) {
+      throw new Error(`Not enough price data for reliable EMA calculations: got ${prices.length}, need at least 300`)
     }
     
     // Current price is the last price in the array
@@ -122,14 +123,12 @@ export async function getTechnicalIndicators() {
     const ema20 = calculateEMA(prices, 20)
     const ema50 = calculateEMA(prices, 50)
     const ema100 = calculateEMA(prices, 100)
-    const ema200 = calculateEMA(prices, 200)
     
     return {
       price: currentPrice,
       ema20,
       ema50,
       ema100,
-      ema200,
       timestamp: new Date()
     }
   } catch (error) {

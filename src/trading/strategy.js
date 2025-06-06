@@ -106,17 +106,15 @@ export async function executeTradeStrategy() {
     
     // Get technical indicators to determine direction
     const indicators = await getTechnicalIndicators()
-    const { ema20, ema50, ema100, ema200 } = indicators
+    const { price, ema20, ema50, ema100 } = indicators
     
     // Determine trade direction based on EMAs
     let direction = 'none'
     
-    // Check if EMAs are in order for a bullish trend
-    if (ema20 > ema50 && ema50 > ema100 && ema100 > ema200) {
+    // New direction logic using price and three EMAs
+    if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
       direction = 'buy'
-    } 
-    // Check if EMAs are in order for a bearish trend
-    else if (ema20 < ema50 && ema50 < ema100 && ema100 < ema200) {
+    } else if (price < ema20 && ema20 < ema50 && ema50 < ema100) {
       direction = 'sell'
     }
     
