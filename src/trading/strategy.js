@@ -90,6 +90,11 @@ export async function executeTradeStrategy() {
     
     // Determine trade direction based on EMAs
     let direction = 'none'
+
+    console.log('current price:', price)
+    console.log('ema20:', ema20)
+    console.log('ema50:', ema50)
+    console.log('ema100:', ema100)
     
     // New direction logic using price and three EMAs
     if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
