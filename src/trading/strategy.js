@@ -4,7 +4,7 @@ import { getTechnicalIndicators } from './indicators.js'
 import { sendAlert } from '../lib/alerts.js'
 
 const COOLDOWN_HOURS = 48
-const SIGNAL_THRESHOLD = 20
+const SIGNAL_THRESHOLD = 40
 const ALERT_THRESHOLD = 40
 const POSITION_SIZE = 2
 
@@ -70,8 +70,7 @@ export async function executeTradeStrategy() {
     let signalHour = null
     
     for (let i = 1; i < recentResults.length; i++) {
-      if (recentResults[i].count >= SIGNAL_THRESHOLD && 
-          recentResults[i-1].count >= SIGNAL_THRESHOLD) {
+      if ((recentResults[i].count + recentResults[i-1].count) >= SIGNAL_THRESHOLD) {
         signalDetected = true
         signalHour = recentResults[i].timestamp
         break
