@@ -108,7 +108,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
   
   // Clear line and write initial status
   process.stdout.write('\r\x1b[K') // Clear the current line
-  process.stdout.write(`Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0`)
+  process.stdout.write(`Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `)
   
   for (let i = 0; i < addressesOfInterest.length; i += chunkSize) {
     const addressesChunk = addressesOfInterest.slice(i, i + chunkSize)
@@ -165,7 +165,7 @@ async function updateTransactionsByAddressesOfInterest(minEthValue = DEFAULT_MIN
     
     // Update the status line with current progress
     process.stdout.write('\r\x1b[K') // Clear the current line
-    process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}`)
+    process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `)
     
     // Wait 1 second before processing the next chunk to avoid rate limiting
     if (i + chunkSize < addressesOfInterest.length) {
