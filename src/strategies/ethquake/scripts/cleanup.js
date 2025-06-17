@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { getDb } from '../lib/mongodb.js'
+import { getDb } from '@/strategies/ethquake/database/mongodb.js'
 
 // Load env vars
 dotenv.config()

@@ -1,5 +1,5 @@
 import express from 'express'
-import { getDb } from '../lib/mongodb.js'
+import { getDb } from '../strategies/ethquake/database/mongodb.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 

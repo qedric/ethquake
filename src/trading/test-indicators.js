@@ -1,4 +1,4 @@
-import { getTechnicalIndicators } from './indicators.js'
+import { getTechnicalIndicators } from '@/trading/indicators.js'
 import dotenv from 'dotenv'
 
 // Load environment variables - required for proper operation

@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
-import { getDb, connectToDatabase } from '../lib/mongodb.js'
-import { fetchTransactions } from '../lib/getTWTransactions.js'
+import { getDb, connectToDatabase } from '@/strategies/ethquake/database/mongodb.js'
+import { fetchTransactions } from '@/lib/getTWTransactions.js'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import readline from 'readline'

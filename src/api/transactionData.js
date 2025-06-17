@@ -1,5 +1,5 @@
 import express from 'express'
-import { connectToDatabase } from '../lib/mongodb.js'
+import { connectToDatabase } from '../strategies/ethquake/database/mongodb.js'
 
 const router = express.Router()
 

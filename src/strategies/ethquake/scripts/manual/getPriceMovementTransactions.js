@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import { fetchTransactions } from '../lib/getTWTransactions'
+import { fetchTransactions } from '@/lib/getTWTransactions.js'
 
 /* 
     For step 2 (transactions before price movements):

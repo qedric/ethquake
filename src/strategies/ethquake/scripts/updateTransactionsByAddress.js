@@ -1,7 +1,7 @@
 import dotenv from 'dotenv'
-import { fetchTransactions } from '../lib/getTWTransactions.js'
-import { getDb } from '../lib/mongodb.js'
-import { getBlockNumberFromTimestamp } from '../lib/getBlockNumberFromTimestamp.js'
+import { fetchTransactions } from '@/lib/getTWTransactions.js'
+import { getDb } from '../database/mongodb.js'
+import { getBlockNumberFromTimestamp } from '@/lib/getBlockNumberFromTimestamp.js'
 
 /**
  * Updates transactions for addresses of interest by fetching new ones since the latest block in the existing data.

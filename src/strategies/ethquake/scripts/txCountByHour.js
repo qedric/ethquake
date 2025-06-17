@@ -1,4 +1,4 @@
-import { getDb, connectToDatabase } from '../lib/mongodb.js'
+import { getDb, connectToDatabase } from '@/strategies/ethquake/database/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load env vars because apparently we need to do this in every file

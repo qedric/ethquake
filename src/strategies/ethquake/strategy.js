@@ -1,7 +1,7 @@
-import { getDb , connectToDatabase } from '../lib/mongodb.js'
-import { placeOrder } from './kraken.js'
-import { getTechnicalIndicators } from './indicators.js'
-import { sendAlert } from '../lib/alerts.js'
+import { getDb , connectToDatabase } from './database/mongodb.js'
+import { placeOrder } from '@/trading/kraken.js'
+import { getTechnicalIndicators } from '@/trading/indicators.js'
+import { sendAlert } from '@/alerts/index.js'
 
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold

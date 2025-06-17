@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { connectToDatabase } from '../lib/mongodb.js'
+import { connectToDatabase } from '@/strategies/ethquake/database/mongodb.js'
 import { updateTransactionsByAddressesOfInterest } from './updateTransactionsByAddress.js'
 import { countTransactionsByHour } from './txCountByHour.js'
 
