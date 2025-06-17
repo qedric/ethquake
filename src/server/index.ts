@@ -34,6 +34,7 @@ interface StrategyConfig {
   name: string
   enabled: boolean
   description?: string
+  cronSchedule: string
 }
 
 interface LoadedStrategy {
@@ -75,29 +76,40 @@ function loadStrategies() {
       continue
     }
 
+    if (!config.cronSchedule) {
+      console.log(`Strategy ${folder} is missing cronSchedule in config`)
+      continue
+    }
+
     console.log(`Loading strategy ${folder} from ${entryPath}`)
-    import(entryPath).then(mod => {
-      if (typeof mod.runPipelineTask !== 'function') {
-        console.warn(`Strategy ${config.name} does not export runPipelineTask`)
-        return
-      }
-      strategies[config.name] = {
-        config,
-        runPipelineTask: mod.runPipelineTask
-      }
-      console.log(`Successfully loaded strategy ${config.name}, scheduling cron job`)
-      cron.schedule('*/15 * * * *', async () => {
-        console.log(`Running pipeline for ${config.name} at ${new Date().toISOString()}`)
-        try {
-          await mod.runPipelineTask()
-          console.log(`Successfully completed pipeline for ${config.name}`)
-        } catch (err) {
-          console.error(`Error running pipeline for ${config.name}:`, err)
+    // Load strategy synchronously to ensure it's available for cron setup
+    import(entryPath)
+      .then(mod => {
+        if (typeof mod.runPipelineTask !== 'function') {
+          console.warn(`Strategy ${config.name} does not export runPipelineTask`)
+          return
         }
+        strategies[config.name] = {
+          config,
+          runPipelineTask: mod.runPipelineTask
+        }
+        console.log(`Successfully loaded strategy ${config.name}`)
+
+        // Set up cron job immediately after strategy is loaded
+        console.log(`Setting up cron job for strategy ${config.name} with schedule: ${config.cronSchedule}`)
+        cron.schedule(config.cronSchedule, async () => {
+          console.log(`Running pipeline for ${config.name} at ${new Date().toISOString()}`)
+          try {
+            await mod.runPipelineTask()
+            console.log(`Successfully completed pipeline for ${config.name}`)
+          } catch (err) {
+            console.error(`Error running pipeline for ${config.name}:`, err)
+          }
+        })
       })
-    }).catch(err => {
-      console.error(`Failed to load strategy ${folder}:`, err)
-    })
+      .catch(err => {
+        console.error(`Failed to load strategy ${folder}:`, err)
+      })
   }
 }
 
