@@ -52,152 +52,161 @@ async function updateTransactionsByAddressesOfInterest({ minEthValue = DEFAULT_M
     console.log(`Using database: ${db.databaseName}`);
     const client = existingClient;
     const shouldCloseConnection = !existingDb;
-    console.log('fromTimestamp:', fromTimestamp);
-    console.log('toTimestamp:', toTimestamp);
-    // Load existing transaction data from MongoDB
-    console.log('Reading existing transaction data from MongoDB...');
-    let existingTransactions = [];
     try {
-        existingTransactions = await db.collection('transactions').find({}).toArray();
-        console.log(`Found ${existingTransactions.length} existing transactions.`);
-    }
-    catch (error) {
-        console.error('Error fetching transactions from MongoDB:', error);
-        throw new Error(`Failed to read existing transactions: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    // Determine block numbers from timestamps if provided
-    let startBlockNumber = null;
-    let endBlockNumber = null;
-    if (fromTimestamp) {
-        startBlockNumber = await getBlockNumberFromTimestamp(fromTimestamp);
-        console.log(`Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`);
-    }
-    else if (existingTransactions.length > 0) {
-        // Find the highest block_number from existing transactions
-        startBlockNumber = Math.max(...existingTransactions.map((tx) => parseInt(tx.block_number)));
-        console.log(`Latest block number in existing data: ${startBlockNumber}`);
-    }
-    else {
-        // If there are no transactions yet and no start timestamp was provided, we need to abort
-        console.log('No existing transactions found in MongoDB and no start timestamp provided.');
-        throw new Error('Cannot determine start block. Please provide a start timestamp.');
-    }
-    if (toTimestamp) {
-        endBlockNumber = await getBlockNumberFromTimestamp(toTimestamp);
-        console.log(`Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`);
-    }
-    // Load addresses of interest from MongoDB
-    let addressesOfInterest = [];
-    try {
-        addressesOfInterest = await db.collection('addresses_of_interest').find({}).toArray();
-        addressesOfInterest = addressesOfInterest.map(item => item.address);
-        console.log(`Loaded ${addressesOfInterest.length} addresses of interest.`);
-    }
-    catch (error) {
-        console.error('Error fetching addresses of interest from MongoDB:', error);
-        throw new Error(`Failed to load addresses of interest: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (addressesOfInterest.length === 0) {
-        throw new Error('No addresses of interest found in MongoDB. Nothing to update.');
-    }
-    // Fetch new transactions for all addresses
-    const endBlockDisplay = endBlockNumber === null ? 'latest' : endBlockNumber;
-    console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`);
-    const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH);
-    let newTransactions = [];
-    // Process addresses in chunks because the API has limits
-    const chunkSize = 10;
-    let processedAddressesCount = 0;
-    // Clear line and write initial status
-    process.stdout.write('\r\x1b[K'); // Clear the current line
-    process.stdout.write(`Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `);
-    for (let i = 0; i < addressesOfInterest.length; i += chunkSize) {
-        const addressesChunk = addressesOfInterest.slice(i, i + chunkSize);
-        const chunkPromises = [];
-        for (const address of addressesChunk) {
-            if (!address)
-                continue; // Skip empty addresses because apparently that's a thing
-            // Need to check for both sending and receiving transactions
-            const fromPromise = fetchTransactions({
-                filter_from_address: address,
-                filter_block_number_gt: startBlockNumber,
-                filter_block_number_lte: endBlockNumber,
-                filter_value_gte: minWeiValue.toString()
-            }).then((txs) => txs.map((tx) => ({
-                hash: tx.hash,
-                block_number: tx.block_number,
-                block_timestamp: tx.block_timestamp,
-                from_address: tx.from_address,
-                to_address: tx.to_address,
-                txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-                value: tx.value,
-                valueInEth: Number(tx.value) / (10 ** 18),
-                addressOfInterest: address,
-                direction: 'sent'
-            })));
-            const toPromise = fetchTransactions({
-                filter_to_address: address,
-                filter_block_number_gt: startBlockNumber,
-                filter_block_number_lte: endBlockNumber,
-                filter_value_gte: minWeiValue.toString()
-            }).then((txs) => txs.map((tx) => ({
-                hash: tx.hash,
-                block_number: tx.block_number,
-                block_timestamp: tx.block_timestamp,
-                from_address: tx.from_address,
-                to_address: tx.to_address,
-                txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
-                value: tx.value,
-                valueInEth: Number(tx.value) / (10 ** 18),
-                addressOfInterest: address,
-                direction: 'received'
-            })));
-            chunkPromises.push(fromPromise, toPromise);
+        console.log('fromTimestamp:', fromTimestamp);
+        console.log('toTimestamp:', toTimestamp);
+        // Load existing transaction data from MongoDB
+        console.log('Reading existing transaction data from MongoDB...');
+        let existingTransactions = [];
+        try {
+            existingTransactions = await db.collection('transactions').find({}).toArray();
+            console.log(`Found ${existingTransactions.length} existing transactions.`);
         }
-        // Process this chunk
-        const chunkResults = await Promise.all(chunkPromises);
-        chunkResults.forEach((txs) => {
-            newTransactions = newTransactions.concat(txs);
-        });
-        processedAddressesCount += addressesChunk.length;
-        // Update the status line with current progress
+        catch (error) {
+            console.error('Error fetching transactions from MongoDB:', error);
+            throw new Error(`Failed to read existing transactions: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        // Determine block numbers from timestamps if provided
+        let startBlockNumber = null;
+        let endBlockNumber = null;
+        if (fromTimestamp) {
+            startBlockNumber = await getBlockNumberFromTimestamp(fromTimestamp);
+            console.log(`Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`);
+        }
+        else if (existingTransactions.length > 0) {
+            // Find the highest block_number from existing transactions
+            startBlockNumber = Math.max(...existingTransactions.map((tx) => parseInt(tx.block_number)));
+            console.log(`Latest block number in existing data: ${startBlockNumber}`);
+        }
+        else {
+            // If there are no transactions yet and no start timestamp was provided, we need to abort
+            console.log('No existing transactions found in MongoDB and no start timestamp provided.');
+            throw new Error('Cannot determine start block. Please provide a start timestamp.');
+        }
+        if (toTimestamp) {
+            endBlockNumber = await getBlockNumberFromTimestamp(toTimestamp);
+            console.log(`Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`);
+        }
+        // Load addresses of interest from MongoDB
+        let addressesOfInterest = [];
+        try {
+            addressesOfInterest = await db.collection('addresses_of_interest').find({}).toArray();
+            addressesOfInterest = addressesOfInterest.map(item => item.address);
+            console.log(`Loaded ${addressesOfInterest.length} addresses of interest.`);
+        }
+        catch (error) {
+            console.error('Error fetching addresses of interest from MongoDB:', error);
+            throw new Error(`Failed to load addresses of interest: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (addressesOfInterest.length === 0) {
+            throw new Error('No addresses of interest found in MongoDB. Nothing to update.');
+        }
+        // Fetch new transactions for all addresses
+        const endBlockDisplay = endBlockNumber === null ? 'latest' : endBlockNumber;
+        console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`);
+        const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH);
+        let newTransactions = [];
+        // Process addresses in chunks because the API has limits
+        const chunkSize = 10;
+        let processedAddressesCount = 0;
+        // Clear line and write initial status
         process.stdout.write('\r\x1b[K'); // Clear the current line
-        process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `);
-        // Wait 1 second before processing the next chunk to avoid rate limiting
-        if (i + chunkSize < addressesOfInterest.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        process.stdout.write(`Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `);
+        for (let i = 0; i < addressesOfInterest.length; i += chunkSize) {
+            const addressesChunk = addressesOfInterest.slice(i, i + chunkSize);
+            const chunkPromises = [];
+            for (const address of addressesChunk) {
+                if (!address)
+                    continue; // Skip empty addresses because apparently that's a thing
+                // Need to check for both sending and receiving transactions
+                const fromPromise = fetchTransactions({
+                    filter_from_address: address,
+                    filter_block_number_gt: startBlockNumber,
+                    filter_block_number_lte: endBlockNumber,
+                    filter_value_gte: minWeiValue.toString()
+                }).then((txs) => txs.map((tx) => ({
+                    hash: tx.hash,
+                    block_number: tx.block_number,
+                    block_timestamp: tx.block_timestamp,
+                    from_address: tx.from_address,
+                    to_address: tx.to_address,
+                    txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+                    value: tx.value,
+                    valueInEth: Number(tx.value) / (10 ** 18),
+                    addressOfInterest: address,
+                    direction: 'sent'
+                })));
+                const toPromise = fetchTransactions({
+                    filter_to_address: address,
+                    filter_block_number_gt: startBlockNumber,
+                    filter_block_number_lte: endBlockNumber,
+                    filter_value_gte: minWeiValue.toString()
+                }).then((txs) => txs.map((tx) => ({
+                    hash: tx.hash,
+                    block_number: tx.block_number,
+                    block_timestamp: tx.block_timestamp,
+                    from_address: tx.from_address,
+                    to_address: tx.to_address,
+                    txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+                    value: tx.value,
+                    valueInEth: Number(tx.value) / (10 ** 18),
+                    addressOfInterest: address,
+                    direction: 'received'
+                })));
+                chunkPromises.push(fromPromise, toPromise);
+            }
+            // Process this chunk
+            const chunkResults = await Promise.all(chunkPromises);
+            chunkResults.forEach((txs) => {
+                newTransactions = newTransactions.concat(txs);
+            });
+            processedAddressesCount += addressesChunk.length;
+            // Update the status line with current progress
+            process.stdout.write('\r\x1b[K'); // Clear the current line
+            process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `);
+            // Wait 1 second before processing the next chunk to avoid rate limiting
+            if (i + chunkSize < addressesOfInterest.length) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
-    }
-    // Move to new line after the progress updates
-    console.log('');
-    console.log(`\nFetched ${newTransactions.length} total new transactions.`);
-    // Remove duplicates using a Map with transaction hash as key
-    const transactionMap = new Map();
-    // First add existing transactions to the map
-    for (const tx of existingTransactions) {
-        transactionMap.set(tx.hash, tx);
-    }
-    // Add new unique transactions to the map
-    let newUniqueCount = 0;
-    for (const tx of newTransactions) {
-        if (!transactionMap.has(tx.hash)) {
+        // Move to new line after the progress updates
+        console.log('');
+        console.log(`\nFetched ${newTransactions.length} total new transactions.`);
+        // Remove duplicates using a Map with transaction hash as key
+        const transactionMap = new Map();
+        // First add existing transactions to the map
+        for (const tx of existingTransactions) {
             transactionMap.set(tx.hash, tx);
-            newUniqueCount++;
+        }
+        // Add new unique transactions to the map
+        let newUniqueCount = 0;
+        for (const tx of newTransactions) {
+            if (!transactionMap.has(tx.hash)) {
+                transactionMap.set(tx.hash, tx);
+                newUniqueCount++;
+            }
+        }
+        console.log(`Added ${newUniqueCount} new unique transactions.`);
+        // Only save the new unique transactions to save time
+        if (newUniqueCount > 0) {
+            const newUniqueTxs = newTransactions.filter((tx) => !existingTransactions.some((e) => e.hash === tx.hash));
+            await saveTransactionsToMongo(newUniqueTxs);
+        }
+        else {
+            console.log('No new transactions to save.');
+        }
+        return {
+            allTransactionsCount: transactionMap.size,
+            newTransactionsCount: newUniqueCount
+        };
+    }
+    finally {
+        // Close MongoDB connection if we opened it
+        if (shouldCloseConnection && client) {
+            await client.close();
+            console.log('Closed MongoDB connection');
         }
     }
-    console.log(`Added ${newUniqueCount} new unique transactions.`);
-    // Only save the new unique transactions to save time
-    if (newUniqueCount > 0) {
-        const newUniqueTxs = newTransactions.filter((tx) => !existingTransactions.some((e) => e.hash === tx.hash));
-        await saveTransactionsToMongo(newUniqueTxs);
-    }
-    else {
-        console.log('No new transactions to save.');
-    }
-    return {
-        allTransactionsCount: transactionMap.size,
-        newTransactionsCount: newUniqueCount
-    };
 }
 async function saveTransactionsToMongo(transactions, collectionName = 'transactions') {
     try {

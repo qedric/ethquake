@@ -1,13 +1,9 @@
 import dotenv from 'dotenv';
 import { connectToDatabase } from '../database/mongodb.js';
 import { fetchTransactions } from '../../../lib/getTWTransactions.js';
-import { fileURLToPath } from 'url';
-import path from 'path';
 import readline from 'readline';
 // Load env vars because apparently we need to do this in every file
 dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 // Constants
 const DEFAULT_MIN_ETH = 100;
 const WEI_TO_ETH = 1e18;
@@ -98,68 +94,6 @@ async function listAllTimestamps(dbType) {
     console.log(`Total: ${timestamps.length} timestamps\n`);
 }
 /**
- * Adds new timestamps to the price_movements collection
- * @param {string} timestamps - Comma-separated list of UNIX timestamps
- * @param {string} dbType - 'A' or 'B'
- */
-async function addTimestamps(timestamps, dbType) {
-    const db = await getDatabase(dbType);
-    try {
-        // First list all existing timestamps
-        await listAllTimestamps(dbType);
-        // Check if collection exists, create if it doesn't
-        console.log('Checking for price_movements collection...');
-        const collections = await db.listCollections().toArray();
-        console.log('Existing collections:', collections.map(c => c.name));
-        const collectionExists = collections.some(c => c.name === 'price_movements');
-        console.log(`Collection exists: ${collectionExists}`);
-        if (!collectionExists) {
-            console.log(`Creating price_movements collection in database ${dbType}...`);
-            await db.createCollection('price_movements');
-            console.log('Collection created successfully');
-        }
-        // Split and parse timestamps
-        const timestampList = timestamps.split(',').map(ts => parseInt(ts.trim()));
-        console.log('Parsed timestamps:', timestampList);
-        // Validate all timestamps
-        const invalidTimestamps = timestampList.filter(ts => isNaN(ts));
-        if (invalidTimestamps.length > 0) {
-            throw new Error(`Invalid timestamps found: ${invalidTimestamps.join(', ')}`);
-        }
-        // Check for existing timestamps
-        console.log('Checking for existing timestamps...');
-        const existing = await db.collection('price_movements')
-            .find({ timestamp: { $in: timestampList } })
-            .toArray();
-        console.log('Found existing timestamps:', existing.map(e => e.timestamp));
-        const existingSet = new Set(existing.map(e => e.timestamp));
-        const newTimestamps = timestampList.filter(ts => !existingSet.has(ts));
-        if (newTimestamps.length === 0) {
-            console.log(`All provided timestamps already exist in database ${dbType}`);
-            return;
-        }
-        // Insert new timestamps
-        const documents = newTimestamps.map(timestamp => ({
-            timestamp,
-            date: new Date(timestamp * 1000),
-            last_processed: null,
-            created_at: new Date()
-        }));
-        console.log('Inserting new timestamps:', newTimestamps);
-        await db.collection('price_movements').insertMany(documents);
-        console.log(`Added ${newTimestamps.length} new timestamps to price_movements collection in database ${dbType}:`);
-        newTimestamps.forEach(ts => {
-            console.log(`- ${ts} (${new Date(ts * 1000).toISOString()})`);
-        });
-        // List all timestamps again after insertion
-        await listAllTimestamps(dbType);
-    }
-    catch (error) {
-        console.error('Error in addTimestamps:', error);
-        throw error;
-    }
-}
-/**
  * Gets new addresses of interest by comparing target and control group transactions
  * @param {number} batchSize - Number of most recent movements to process
  * @param {string} dbType - 'A' or 'B'
@@ -167,33 +101,36 @@ async function addTimestamps(timestamps, dbType) {
 async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
     const db = await getDatabase(dbType);
     // Get the most recent price movements, regardless of processed status
-    const recentMovements = await db.collection('price_movements')
-        .find()
+    const priceMovements = await db.collection('price_movements')
+        .find({})
         .sort({ timestamp: -1 })
         .limit(batchSize)
         .toArray();
-    if (recentMovements.length === 0) {
+    if (priceMovements.length === 0) {
         console.log(`No price movements found in database ${dbType}`);
         return;
     }
-    console.log(`Processing ${recentMovements.length} most recent price movements together in database ${dbType}...`);
+    console.log(`Processing ${priceMovements.length} most recent price movements together in database ${dbType}...`);
+    // Convert min ETH to Wei for the API
+    const minWeiValue = BigInt(DEFAULT_MIN_ETH) * BigInt(WEI_TO_ETH);
     // Collect all target transactions
     const allTargetTransactions = [];
-    for (const movement of recentMovements) {
+    for (const movement of priceMovements) {
         console.log(`\nFetching target transactions for movement at ${new Date(movement.timestamp * 1000).toISOString()}...`);
         // Get target transactions (1 hour before movement)
         const targetStart = movement.timestamp - (LOOKBACK_HOURS * 3600);
         const targetEnd = movement.timestamp;
         const targetTransactions = await fetchTransactions({
             filter_block_timestamp_gte: targetStart,
-            filter_block_timestamp_lte: targetEnd
+            filter_block_timestamp_lte: targetEnd,
+            filter_value_gte: minWeiValue.toString()
         });
         console.log(`Found ${targetTransactions.length} target transactions`);
         allTargetTransactions.push(...targetTransactions);
     }
     // Collect all control transactions
     const allControlTransactions = [];
-    for (const movement of recentMovements) {
+    for (const movement of priceMovements) {
         const targetStart = movement.timestamp - (LOOKBACK_HOURS * 3600);
         // Get three control periods for each movement
         for (let i = 0; i < 3; i++) {
@@ -208,7 +145,8 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
             console.log(`\nFetching control transactions ${i + 1}/3 (${randomSign > 0 ? '+' : '-'}${randomMinutes} minutes from 24h prior)...`);
             const controlTransactions = await fetchTransactions({
                 filter_block_timestamp_gte: controlStart,
-                filter_block_timestamp_lte: controlEnd
+                filter_block_timestamp_lte: controlEnd,
+                filter_value_gte: minWeiValue.toString()
             });
             console.log(`Found ${controlTransactions.length} control transactions`);
             allControlTransactions.push(...controlTransactions);
@@ -232,7 +170,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
     if (newAddresses.length === 0) {
         console.log('No new addresses found across all movements');
         // Mark all movements as processed
-        await db.collection('price_movements').updateMany({ _id: { $in: recentMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
+        await db.collection('price_movements').updateMany({ _id: { $in: priceMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
         console.log('All price movements marked as processed');
         return;
     }
@@ -245,7 +183,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
             address: addr,
             sent_count: sentCount,
             received_count: receivedCount,
-            movement_count: recentMovements.length,
+            movement_count: priceMovements.length,
             created_at: new Date()
         };
     }));
@@ -272,7 +210,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
             await db.collection('addresses_of_interest').insertMany(trulyNewAddresses);
             console.log(`Added ${trulyNewAddresses.length} new addresses to addresses_of_interest collection`);
             // Mark all movements as processed
-            await db.collection('price_movements').updateMany({ _id: { $in: recentMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
+            await db.collection('price_movements').updateMany({ _id: { $in: priceMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
             console.log('All price movements marked as processed');
         }
         else {
@@ -282,51 +220,9 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
     else {
         console.log('No new addresses to add (all found addresses already exist)');
         // Mark all movements as processed since there was nothing to add
-        await db.collection('price_movements').updateMany({ _id: { $in: recentMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
+        await db.collection('price_movements').updateMany({ _id: { $in: priceMovements.map(m => m._id) } }, { $set: { last_processed: new Date() } });
         console.log('All price movements marked as processed');
     }
 }
-// Run the appropriate command if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const command = process.argv[2];
-    if (!command) {
-        console.error('Please provide a command: add-timestamps or get-new-addresses');
-        process.exit(1);
-    }
-    let client; // Store the MongoDB client for closing
-    promptForDatabase()
-        .then(dbType => {
-        console.log(`Using database: ethquake${dbType === 'B' ? '_b' : ''}`);
-        if (command === 'add-timestamps') {
-            const timestamps = process.argv[3];
-            if (!timestamps) {
-                throw new Error('Please provide comma-separated timestamps');
-            }
-            return addTimestamps(timestamps, dbType);
-        }
-        else if (command === 'get-new-addresses') {
-            const batchSize = parseInt(process.argv[3]) || DEFAULT_BATCH_SIZE;
-            return getNewAddresses(batchSize, dbType);
-        }
-        else {
-            throw new Error(`Unknown command: ${command}`);
-        }
-    })
-        .then(() => {
-        console.log('Command completed successfully');
-    })
-        .catch((err) => {
-        console.error('Command failed:', err);
-        process.exit(1);
-    })
-        .finally(() => {
-        // Close the MongoDB connection to allow the process to exit
-        if (client) {
-            console.log('Closing MongoDB connection...');
-            client.close()
-                .then(() => console.log('MongoDB connection closed'))
-                .catch((err) => console.error('Error closing MongoDB connection:', err));
-        }
-    });
-}
-export { addTimestamps, getNewAddresses };
+// Export functions
+export { promptForDatabase, addTimestamp, getNewAddresses, listAllTimestamps };

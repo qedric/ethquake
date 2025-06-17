@@ -1,6 +1,9 @@
 import { placeOrder } from './kraken.js'
 import dotenv from 'dotenv'
 
+// Load environment variables
+dotenv.config()
+
 async function testPlaceOrder() {
   try {
     const side = 'sell' // or 'sell'
