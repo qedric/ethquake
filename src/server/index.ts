@@ -44,9 +44,12 @@ interface LoadedStrategy {
 const strategies: Record<string, LoadedStrategy> = {}
 
 function loadStrategies() {
+  console.log('Loading strategies from:', STRATEGIES_DIR)
   const strategyFolders = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => dirent.name)
+  
+  console.log('Found strategy folders:', strategyFolders)
 
   for (const folder of strategyFolders) {
     const strategyPath = path.join(STRATEGIES_DIR, folder)
@@ -55,14 +58,24 @@ function loadStrategies() {
     let entryPath = path.join(strategyPath, 'run.ts')
     if (!fs.existsSync(entryPath)) {
       entryPath = path.join(strategyPath, 'run.js')
-      if (!fs.existsSync(entryPath)) continue
+      if (!fs.existsSync(entryPath)) {
+        console.log(`No run.ts or run.js found for strategy ${folder}`)
+        continue
+      }
     }
 
-    if (!fs.existsSync(configPath)) continue
+    if (!fs.existsSync(configPath)) {
+      console.log(`No strategy.json found for strategy ${folder}`)
+      continue
+    }
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as StrategyConfig
-    if (!config.enabled) continue
+    if (!config.enabled) {
+      console.log(`Strategy ${folder} is disabled in config`)
+      continue
+    }
 
+    console.log(`Loading strategy ${folder} from ${entryPath}`)
     import(entryPath).then(mod => {
       if (typeof mod.runPipelineTask !== 'function') {
         console.warn(`Strategy ${config.name} does not export runPipelineTask`)
@@ -72,9 +85,12 @@ function loadStrategies() {
         config,
         runPipelineTask: mod.runPipelineTask
       }
+      console.log(`Successfully loaded strategy ${config.name}, scheduling cron job`)
       cron.schedule('*/15 * * * *', async () => {
+        console.log(`Running pipeline for ${config.name} at ${new Date().toISOString()}`)
         try {
           await mod.runPipelineTask()
+          console.log(`Successfully completed pipeline for ${config.name}`)
         } catch (err) {
           console.error(`Error running pipeline for ${config.name}:`, err)
         }
