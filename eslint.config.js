@@ -1,11 +1,23 @@
 import js from '@eslint/js'
 import importPlugin from 'eslint-plugin-import'
+import tsParser from '@typescript-eslint/parser'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
 
 export default [
-  js.configs.recommended,
   {
-    files: ['**/*.js'],
+    ignores: ['dist/**/*']
+  },
+  {
+    files: ['**/*.ts'],
+    plugins: {
+      '@typescript-eslint': tsPlugin
+    },
     languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module'
+      },
       sourceType: 'module',
       ecmaVersion: 2022,
       globals: {
@@ -29,15 +41,14 @@ export default [
         fetch: 'readonly'
       }
     },
-    plugins: {
-      import: importPlugin
-    },
     rules: {
       'semi': ['error', 'never'],
+      '@typescript-eslint/semi': ['error', 'never'],
       'quotes': ['warn', 'single'],
       'no-unused-vars': 'warn',
       'import/no-duplicates': 'error',
       'import/export': 'error'
     }
-  }
+  },
+  js.configs.recommended
 ] 
