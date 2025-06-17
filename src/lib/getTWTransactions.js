@@ -50,7 +50,12 @@ export async function fetchTransactions(options = {}) {
   } catch (error) {
     console.error('Error fetching transactions:', error.message)
     if (error.response) {
-      console.error('Response data:', error.response.data)
+      const data = error.response.data
+      if (typeof data === 'string' && data.trim().toLowerCase().startsWith('<!doctype html')) {
+        console.error('Response data: [HTML error page skipped]')
+      } else {
+        console.error('Response data:', data)
+      }
       console.error('Response status:', error.response.status)
     }
     return [] // Return empty array on error

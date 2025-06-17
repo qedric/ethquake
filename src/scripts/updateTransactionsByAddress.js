@@ -117,7 +117,8 @@ async function updateTransactionsByAddressesOfInterest({
   }
 
   // Fetch new transactions for all addresses
-  console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockNumber} for ${addressesOfInterest.length} addresses...`)
+  const endBlockDisplay = endBlockNumber === null ? 'latest' : endBlockNumber
+  console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`)
   
   const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH)
   let newTransactions = []
