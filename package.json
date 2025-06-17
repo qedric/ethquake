@@ -2,18 +2,18 @@
   "name": "Ethquake",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
   "scripts": {
-    "start": "node --loader @esbuild-kit/esm-loader src/server/index.js",
-    "dev": "nodemon --exec node --loader @esbuild-kit/esm-loader src/server/index.js",
+    "build": "tsc",
+    "start": "node dist/server/index.js",
+    "dev": "ts-node --project tsconfig.json --require tsconfig-paths/register src/server/index.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prelint": "echo 'Running ESLint...'",
     "prepublish": "npm run lint",
-    "add-timestamps": "node src/strategies/ethquake/scripts/maintenance.js add-timestamps",
-    "get-new-addresses": "node src/strategies/ethquake/scripts/maintenance.js get-new-addresses",
-    "cleanup-addresses": "node src/strategies/ethquake/scripts/cleanup.js",
-    "run-pipeline-b": "node src/strategies/ethquake/scripts/runPipelineB.js"
+    "add-timestamps": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/maintenance.ts add-timestamps",
+    "get-new-addresses": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/maintenance.ts get-new-addresses",
+    "cleanup-addresses": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/cleanup.ts",
+    "run-pipeline-b": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/runPipelineB.ts"
   },
   "keywords": [],
   "author": "",
@@ -33,9 +33,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
-    "@types/node": "^22.13.10",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.32",
+    "@types/node-cron": "^3.0.11",
     "eslint": "^9.22.0",
     "eslint-plugin-import": "^2.31.0",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3"
   }
 }

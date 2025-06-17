@@ -1,33 +1,91 @@
+import { getDb, connectToDatabase, logActivity } from '@/strategies/ethquake/database/mongodb'
+import { selectDatabase } from '@/strategies/ethquake/database/dbSelector'
+import dotenv from 'dotenv'
+import transactionDataRouter from '@/api/transactionData'
+import visualizationRouter from '@/api/visualizationRouter'
+import path from 'path'
+import basicAuth from 'express-basic-auth'
 import express from 'express'
 import cron from 'node-cron'
-import { updateTransactionsByAddressesOfInterest } from '@/strategies/ethquake/scripts/updateTransactionsByAddress.js'
-import { countTransactionsByHour } from '@/strategies/ethquake/scripts/txCountByHour.js'
-import { executeTradeStrategy } from '@/strategies/ethquake/strategy.js'
-import { getDb, connectToDatabase, logActivity } from '@/strategies/ethquake/database/mongodb.js'
-import { selectDatabase } from '@/strategies/ethquake/database/dbSelector.js'
-import dotenv from 'dotenv'
-import transactionDataRouter from '@/api/transactionData.js'
-import visualizationRouter from '@/api/visualizationRouter.js'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import basicAuth from 'express-basic-auth'
+import fs from 'fs'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
 
 // Basic authentication middleware
 const authMiddleware = basicAuth({
-  users: { [process.env.BASIC_AUTH_USER]: process.env.BASIC_AUTH_PASSWORD },
+  users: { [process.env.BASIC_AUTH_USER as string]: process.env.BASIC_AUTH_PASSWORD! },
   challenge: true
 })
 
 const app = express()
 const PORT = process.env.PORT || 8080
-let server = null
+let server: any = null
 
 // Define __dirname equivalent for ES modules
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// const __filename = fileURLToPath(import.meta.url)
+// const __dirname = path.dirname(__filename)
+
+const STRATEGIES_DIR = path.join(__dirname, '../strategies')
+
+// Define types for strategy configuration and loaded strategy
+interface StrategyConfig {
+  name: string
+  enabled: boolean
+  description?: string
+}
+
+interface LoadedStrategy {
+  config: StrategyConfig
+  runPipelineTask: () => Promise<any>
+}
+
+const strategies: Record<string, LoadedStrategy> = {}
+
+function loadStrategies() {
+  const strategyFolders = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => dirent.name)
+
+  for (const folder of strategyFolders) {
+    const strategyPath = path.join(STRATEGIES_DIR, folder)
+    const configPath = path.join(strategyPath, 'strategy.json')
+    // Try run.ts first (dev), then run.js (prod)
+    let entryPath = path.join(strategyPath, 'run.ts')
+    if (!fs.existsSync(entryPath)) {
+      entryPath = path.join(strategyPath, 'run.js')
+      if (!fs.existsSync(entryPath)) continue
+    }
+
+    if (!fs.existsSync(configPath)) continue
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as StrategyConfig
+    if (!config.enabled) continue
+
+    import(entryPath).then(mod => {
+      if (typeof mod.runPipelineTask !== 'function') {
+        console.warn(`Strategy ${config.name} does not export runPipelineTask`)
+        return
+      }
+      strategies[config.name] = {
+        config,
+        runPipelineTask: mod.runPipelineTask
+      }
+      cron.schedule('*/15 * * * *', async () => {
+        try {
+          await mod.runPipelineTask()
+        } catch (err) {
+          console.error(`Error running pipeline for ${config.name}:`, err)
+        }
+      })
+    }).catch(err => {
+      console.error(`Failed to load strategy ${folder}:`, err)
+    })
+  }
+}
+
+// Call this at startup
+loadStrategies()
 
 // Add authentication to routes
 app.get('/', authMiddleware, (req, res) => {
@@ -52,7 +110,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason)
   logActivity({
     type: 'UNHANDLED_REJECTION',
-    reason: reason?.message || String(reason)
+    reason: reason && typeof reason === 'object' && 'message' in reason ? (reason as any).message : String(reason)
   }).catch(err => console.error('Failed to log unhandled rejection:', err))
 })
 
@@ -74,7 +132,7 @@ async function startServer() {
     const dbName = await selectDatabase()
     
     // Connect to MongoDB first
-    await connectToDatabase(dbName)
+    await connectToDatabase(typeof dbName === 'string' ? dbName : undefined)
     
     // Start Express server
     server = app.listen(PORT, () => {
@@ -119,11 +177,12 @@ app.get('/status', authMiddleware, async (req, res) => {
         db = await getDb()
       } catch (reconnectError) {
         console.error('Failed to reconnect to database:', reconnectError)
-        return res.status(500).json({ 
+        res.status(500).json({ 
           status: 'degraded',
           error: 'Database connection unavailable',
           lastUpdate: new Date().toISOString()
         })
+        return
       }
     }
     
@@ -137,67 +196,23 @@ app.get('/status', authMiddleware, async (req, res) => {
       lastUpdate: new Date().toISOString()
     })
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
   }
 })
 
-// Extract the pipeline task into a separate function so you can 
-// manually trigger it like the control freak you are
-async function runDataPipelineTask() {
-  console.log('Running data pipeline task:', new Date().toISOString())
-  
-  try {
-    // Get the current database connection
-    const db = await getDb()
-    const client = db.client
-    
-    // Update transactions data
-    console.log('Updating transactions data...')
-    const txResult = await updateTransactionsByAddressesOfInterest({
-      existingDb: db,
-      existingClient: client
-    })
-    console.log(`Added ${txResult.newTransactionsCount} new transactions`)
-    
-    // Run analysis
-    console.log('Running transaction analysis...')
-    const analysisResults = await countTransactionsByHour(db, client)
-    console.log(`Analysis complete with ${analysisResults?.length || 0} hourly results`)
-    
-    // Only execute trading strategy in production
-    if (process.env.NODE_ENV === 'production') {
-      console.log('Executing trading strategy...')
-      await executeTradeStrategy()
-    } else {
-      console.log('Skipping trading strategy in non-production environment')
-    }
-    
-    return { success: true }
-  } catch (error) {
-    console.error('Error in data pipeline task:', error)
-    return { success: false, error: error.message }
+// Manual trigger endpoint
+app.post('/run-pipeline/:strategy', authMiddleware, async (req, res) => {
+  const { strategy } = req.params
+  const strat = strategies[strategy]
+  if (!strat) {
+    res.status(404).json({ error: 'Strategy not found or not enabled' })
+    return
   }
-}
 
-// Add an authenticated endpoint so you can manually trigger the task
-// without exposing it to every random internet user with a browser
-app.post('/run-pipeline', authMiddleware, async (req, res) => {
-  const apiKey = req.headers['x-api-key']
-  
-  // Check if the API key is valid - can't believe I have to explain this
-  if (!apiKey || apiKey !== process.env.API_SECRET_KEY) {
-    return res.status(401).json({ error: 'Unauthorized. Nice try.' })
-  }
-  
   try {
-    const result = await runDataPipelineTask()
+    const result = await strat.runPipelineTask()
     res.json(result)
-  } catch (error) {
-    res.status(500).json({ error: error.message })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
-})
-
-// Main cron job that runs your data pipeline every 15 minutes
-cron.schedule('*/15 * * * *', async () => {
-  await runDataPipelineTask()
 }) 

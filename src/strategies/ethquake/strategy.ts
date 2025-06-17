@@ -30,7 +30,7 @@ export async function executeTradeStrategy() {
         await connectToDatabase() // Always reconnect first
         db = await getDb()
       } catch (error) {
-        console.log(`Database connection attempt ${connectionAttempts} failed - ${error.message}`)
+        console.log(`Database connection attempt ${connectionAttempts} failed - ${error instanceof Error ? error.message : String(error)}`)
         if (connectionAttempts >= MAX_ATTEMPTS) {
           throw new Error(`Failed to connect to database after ${MAX_ATTEMPTS} attempts`)
         }
@@ -47,7 +47,7 @@ export async function executeTradeStrategy() {
       .toArray()
 
     // Sort back into ascending order for our logic
-    recentResults.sort((a, b) => a.timestamp - b.timestamp)
+    recentResults.sort((a: any, b: any) => a.timestamp - b.timestamp)
 
     console.log('recent results:', recentResults)
     

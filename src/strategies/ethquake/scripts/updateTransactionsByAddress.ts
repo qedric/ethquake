@@ -7,23 +7,23 @@ import { getBlockNumberFromTimestamp } from '@/lib/getBlockNumberFromTimestamp.j
  * Updates transactions for addresses of interest by fetching new ones since the latest block in the existing data.
  * 
  * Usage via CLI:
- *   node scripts/updateTransactionsByAddress.js [minEthValue] [startBlockNumber]
+ *   node scripts/updateTransactionsByAddress.ts [minEthValue] [startBlockNumber]
  * 
  * Examples:
- *   node scripts/updateTransactionsByAddress.js
+ *   node scripts/updateTransactionsByAddress.ts
  *     - Uses default minimum ETH value: 100
  *     - Continues from latest block in database
  *   
- *   node scripts/updateTransactionsByAddress.js 200
+ *   node scripts/updateTransactionsByAddress.ts 200
  *     - Only includes transactions of 200+ ETH
  *     - Continues from latest block in database
  *
- *   node scripts/updateTransactionsByAddress.js 100 15000000
+ *   node scripts/updateTransactionsByAddress.ts 100 15000000
  *     - Uses default minimum ETH value: 100
  *     - Starts fetching from block 15000000
  * 
  * Usage via import:
- *   import { updateTransactionsByAddressesOfInterest } from './updateTransactionsByAddress.js'
+ *   import { updateTransactionsByAddressesOfInterest } from './updateTransactionsByAddress.ts'
  *   
  *   // Update transactions with default parameters
  *   await updateTransactionsByAddressesOfInterest()
