@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ethquake Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f5f5f5;
+    }
+    .chart-container {
+      width: 90%;
+      max-width: 1200px;
+      margin: 20px auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      height: 60vh;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    .controls {
+      margin: 15px auto;
+      width: 90%;
+      max-width: 1200px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      min-width: 200px;
+    }
+    .control-label {
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    .threshold-value {
+      display: inline-block;
+      min-width: 30px;
+      text-align: center;
+    }
+    button {
+      padding: 8px 15px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Ethquake Transaction Analysis</h1>
+  
+  <div class="controls">
+    <div class="control-group">
+      <label class="control-label">Threshold: <span id="thresholdValue" class="threshold-value">0</span></label>
+      <input type="range" id="thresholdSlider" min="0" max="100" value="0" step="1">
+    </div>
+    
+    <div class="checkbox-group">
+      <input type="checkbox" id="showTestData">
+      <label for="showTestData">Show Test Data</label>
+    </div>
+    
+    <button id="resetZoom">Reset Zoom</button>
+    <button id="refreshChart">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="txChart"></canvas>
+  </div>
+
+  <script>
+    // Global variables
+    let chartInstance = null
+    let originalData = []
+    let paddedTestData = []
+    let isMobile = window.innerWidth < 768
+    
+    // Controls
+    const thresholdSlider = document.getElementById('thresholdSlider')
+    const thresholdValue = document.getElementById('thresholdValue')
+    const showTestDataCheckbox = document.getElementById('showTestData')
+    
+    thresholdSlider.addEventListener('input', function() {
+      thresholdValue.textContent = this.value
+      updateChartWithThreshold(Number(this.value))
+    })
+    
+    console.log('Attaching event listener to checkbox')
+    showTestDataCheckbox.addEventListener('change', function() {
+      console.log('Checkbox state changed')
+      console.log('Threshold slider value:', thresholdSlider.value)
+      updateChartWithThreshold(Number(thresholdSlider.value))
+    })
+    
+    document.getElementById('resetZoom').addEventListener('click', function() {
+      if (chartInstance) {
+        chartInstance.resetZoom()
+      }
+    })
+    
+    document.getElementById('refreshChart').addEventListener('click', function() {
+      fetchDataAndChart()
+    })
+    
+    function updateChartWithThreshold(threshold) {
+      console.log('updateChartWithThreshold called with threshold:', threshold)
+      console.log('chart instance:', chartInstance)
+      console.log('originalData.length', originalData.length)
+
+      if (!chartInstance || !originalData.length) return
+      
+      const filteredData = originalData.map(item => {
+        return item.count >= threshold ? item.count : null
+      })
+      
+      const filteredTestData = paddedTestData.map(item => {
+        return item.count >= threshold ? item.count : null
+      })
+      
+      console.log('Filtered Padded Test Data:', filteredTestData)
+      
+      chartInstance.data.datasets[0].data = filteredData
+      
+      console.log('Padded Test Data:', paddedTestData)
+
+      if (showTestDataCheckbox.checked) {
+        console.log('Checkbox is checked, updating chart with padded test data')
+        if (chartInstance.data.datasets.length === 1) {
+          console.log('Adding test data dataset to chart')
+          chartInstance.data.datasets.push({
+            label: 'Test Data',
+            data: filteredTestData,
+            backgroundColor: 'rgba(255, 99, 132, 0.5)',
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 1
+          })
+        } else {
+          console.log('Updating existing test data dataset')
+          chartInstance.data.datasets[1].data = filteredTestData
+        }
+      } else {
+        console.log('Checkbox is not checked, removing test data from chart')
+        if (chartInstance.data.datasets.length > 1) {
+          console.log('Removing test data dataset from chart')
+          chartInstance.data.datasets.pop()
+        }
+      }
+      
+      // Update y-axis to start from threshold
+      chartInstance.options.scales.y.min = threshold > 0 ? threshold : 0
+      
+      chartInstance.update()
+      console.log('Datasets after modification:', chartInstance.data.datasets)
+    }
+    
+    async function fetchDataAndChart() {
+      try {
+        if (chartInstance) {
+          chartInstance.destroy()
+          chartInstance = null
+        }
+
+        // Fetch both production and test data
+        const [prodResponse, testResponse] = await Promise.all([
+          fetch('/api/transactions/hourly'),
+          fetch('/api/transactions/hourly?db=ethquake_b')
+        ])
+        
+        if (!prodResponse.ok || !testResponse.ok) throw new Error('Network response was not ok')
+        
+        const [prodData, testData] = await Promise.all([
+          prodResponse.json(),
+          testResponse.json()
+        ])
+        
+        console.log('Production Data Start:', new Date(prodData[0].timestamp).toISOString())
+        console.log('Production Data End:', new Date(prodData[prodData.length - 1].timestamp).toISOString())
+        console.log('Production Data Length:', prodData.length)
+
+        console.log('Test Data Start:', new Date(testData[0].timestamp).toISOString())
+        console.log('Test Data End:', new Date(testData[testData.length - 1].timestamp).toISOString())
+        console.log('Test Data Length:', testData.length)
+
+        console.log('first test record:', testData[0])
+        console.log('last test record:', testData[testData.length - 1])
+
+        console.log('Assigning paddedTestData')
+        paddedTestData = prodData.map(prodEntry => {
+          const match = testData.find(testEntry => testEntry.displayDateHour == prodEntry.displayDateHour)
+          return {
+            count: match ? match.count : 0,
+            displayDateHour: prodEntry.displayDateHour,
+            hour: prodEntry.hour,
+            timestamp: prodEntry.timestamp
+          }
+        })
+        console.log('paddedTestData assigned:', paddedTestData)
+
+        const labels = prodData.map(item => item.displayDateHour || `${new Date(item.timestamp).toLocaleDateString()} - ${item.hour.toString().padStart(2, '0')}`)
+        const counts = prodData.map(item => item.count)
+        const testCounts = testData.map(item => item.count)
+        
+        const maxCount = Math.max(...counts, ...testCounts)
+        thresholdSlider.max = maxCount
+        
+        const ctx = document.getElementById('txChart').getContext('2d')
+        console.log('Creating chart instance')
+        chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Production Data',
+              data: counts,
+              backgroundColor: 'rgba(54, 162, 235, 0.5)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              title: {
+                display: true,
+                text: 'Transactions Per Hour'
+              },
+              tooltip: {
+                mode: 'index',
+                intersect: false,
+              },
+              zoom: {
+                pan: {
+                  enabled: true,
+                  mode: 'x',
+                  modifierKey: 'ctrl',
+                },
+                zoom: {
+                  wheel: {
+                    enabled: true,
+                  },
+                  pinch: {
+                    enabled: true
+                  },
+                  mode: 'x',
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: {
+                  display: true,
+                  text: 'Count'
+                },
+                ticks: {
+                  precision: 0
+                }
+              },
+              x: {
+                title: {
+                  display: true,
+                  text: 'Date/Hour'
+                },
+                ticks: {
+                  maxRotation: 45,
+                  minRotation: 45,
+                  autoSkip: true,
+                  maxTicksLimit: isMobile ? 8 : 15
+                }
+              }
+            },
+            layout: {
+              padding: {
+                top: 10,
+                right: 10,
+                bottom: 10,
+                left: 10
+              }
+            },
+            aspectRatio: isMobile ? 1 : 2
+          }
+        })
+        console.log('Chart instance created:', chartInstance)
+
+        chartInstance.update()
+        console.log('Chart update called')
+        
+        if (isMobile && originalData.length > 24) {
+          const dataLength = originalData.length
+          chartInstance.zoomScale('x', {
+            min: chartInstance.scales.x.min + (chartInstance.scales.x.max - chartInstance.scales.x.min) * (dataLength - 24) / dataLength,
+            max: chartInstance.scales.x.max
+          }, false)
+          chartInstance.update()
+        } else if (originalData.length > 24) {
+          const dataLength = originalData.length
+          const visiblePoints = Math.min(dataLength, 50)
+          chartInstance.zoomScale('x', {
+            min: chartInstance.scales.x.min + (chartInstance.scales.x.max - chartInstance.scales.x.min) * (dataLength - visiblePoints) / dataLength,
+            max: chartInstance.scales.x.max
+          }, false)
+          chartInstance.update()
+        }
+
+        // Update chart after paddedTestData is assigned
+        console.log('Updating chart with new data')
+        updateChartWithThreshold(Number(thresholdSlider.value))
+
+        originalData = prodData
+        console.log('Original Data assigned:', originalData)
+      } catch (error) {
+        console.error('Error fetching chart data:', error)
+      }
+    }
+    
+    document.addEventListener('DOMContentLoaded', fetchDataAndChart)
+    
+    window.addEventListener('resize', function() {
+      isMobile = window.innerWidth < 768
+    })
+  </script>
+</body>
+</html> 

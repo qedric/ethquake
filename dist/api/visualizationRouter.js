@@ -6,7 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = express.Router();
 // Serve the chart page
 router.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../public/charts.html'));
+    res.sendFile(path.join(__dirname, '../../src/public/charts.html'));
 });
 // API endpoint to get chart data
 router.get('/data', async (req, res) => {

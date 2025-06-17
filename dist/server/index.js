@@ -118,7 +118,7 @@ async function startServer() {
         });
         // Add the router with authentication
         app.use('/api/transactions', authMiddleware, transactionDataRouter);
-        app.use(express.static(path.join(__dirname, 'public')));
+        app.use(express.static(path.join(__dirname, '../public')));
         app.use('/charts', authMiddleware, visualizationRouter);
     }
     catch (error) {
