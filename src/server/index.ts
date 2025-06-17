@@ -24,9 +24,12 @@ const authMiddleware = basicAuth({
 const app = express()
 const PORT = process.env.PORT || 8080
 
-// In production, we're running from dist/server/index.js, so we need to look in dist/strategies
-// In development, we're running from src/server/index.ts, so we need to look in src/strategies
-const STRATEGIES_DIR = path.join(__dirname, process.env.NODE_ENV === 'production' ? '../strategies' : '../strategies')
+// When running npm start, we want dist/
+// When running npm run dev, we want src/
+const isDev = process.env.NODE_NO_WARNINGS === '1' // This is set in our dev script
+const STRATEGIES_DIR = isDev
+  ? path.join(process.cwd(), 'src/strategies')
+  : path.join(process.cwd(), 'dist/strategies')
 
 // Define types for strategy configuration and loaded strategy
 interface StrategyConfig {
@@ -54,14 +57,12 @@ async function loadStrategies() {
   for (const folder of strategyFolders) {
     const strategyPath = path.join(STRATEGIES_DIR, folder)
     const configPath = path.join(strategyPath, 'strategy.json')
-    // Try run.ts first (dev), then run.js (prod)
-    let entryPath = path.join(strategyPath, 'run.ts')
+    // In dev mode, use .ts, in prod mode use .js
+    const entryPath = path.join(strategyPath, isDev ? 'run.ts' : 'run.js')
+    
     if (!fs.existsSync(entryPath)) {
-      entryPath = path.join(strategyPath, 'run.js')
-      if (!fs.existsSync(entryPath)) {
-        console.log(`No run.ts or run.js found for strategy ${folder}`)
-        continue
-      }
+      console.log(`No ${isDev ? 'run.ts' : 'run.js'} found for strategy ${folder}`)
+      continue
     }
 
     if (!fs.existsSync(configPath)) {
