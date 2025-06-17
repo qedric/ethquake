@@ -1,5 +1,3 @@
-import { getDb, connectToDatabase, logActivity } from '../strategies/ethquake/database/mongodb.js';
-import { selectDatabase } from '../strategies/ethquake/database/dbSelector.js';
 import dotenv from 'dotenv';
 import transactionDataRouter from '../api/transactionData.js';
 import visualizationRouter from '../api/visualizationRouter.js';
@@ -21,13 +19,14 @@ const authMiddleware = basicAuth({
 });
 const app = express();
 const PORT = process.env.PORT || 8080;
-let server = null;
 const STRATEGIES_DIR = path.join(__dirname, '../strategies');
 const strategies = {};
-function loadStrategies() {
+async function loadStrategies() {
+    console.log('Loading strategies from:', STRATEGIES_DIR);
     const strategyFolders = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
+    console.log('Found strategy folders:', strategyFolders);
     for (const folder of strategyFolders) {
         const strategyPath = path.join(STRATEGIES_DIR, folder);
         const configPath = path.join(strategyPath, 'strategy.json');
@@ -35,86 +34,65 @@ function loadStrategies() {
         let entryPath = path.join(strategyPath, 'run.ts');
         if (!fs.existsSync(entryPath)) {
             entryPath = path.join(strategyPath, 'run.js');
-            if (!fs.existsSync(entryPath))
+            if (!fs.existsSync(entryPath)) {
+                console.log(`No run.ts or run.js found for strategy ${folder}`);
                 continue;
+            }
         }
-        if (!fs.existsSync(configPath))
+        if (!fs.existsSync(configPath)) {
+            console.log(`No strategy.json found for strategy ${folder}`);
             continue;
+        }
         const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-        if (!config.enabled)
+        if (!config.enabled) {
+            console.log(`Strategy ${folder} is disabled in config`);
             continue;
-        import(entryPath).then(mod => {
+        }
+        if (!config.cronSchedule) {
+            console.log(`Strategy ${folder} is missing cronSchedule in config`);
+            continue;
+        }
+        console.log(`Loading strategy ${folder} from ${entryPath}`);
+        try {
+            const mod = await import(entryPath);
             if (typeof mod.runPipelineTask !== 'function') {
                 console.warn(`Strategy ${config.name} does not export runPipelineTask`);
-                return;
+                continue;
             }
+            // Run the pipeline task once to initialize
+            console.log(`Initializing strategy ${config.name}...`);
+            await mod.runPipelineTask();
             strategies[config.name] = {
                 config,
                 runPipelineTask: mod.runPipelineTask
             };
-            cron.schedule('*/15 * * * *', async () => {
+            console.log(`Successfully loaded strategy ${config.name}`);
+            // Set up cron job immediately after strategy is loaded
+            console.log(`Setting up cron job for strategy ${config.name} with schedule: ${config.cronSchedule}`);
+            cron.schedule(config.cronSchedule, async () => {
+                console.log(`Running pipeline for ${config.name} at ${new Date().toISOString()}`);
                 try {
                     await mod.runPipelineTask();
+                    console.log(`Successfully completed pipeline for ${config.name}`);
                 }
                 catch (err) {
                     console.error(`Error running pipeline for ${config.name}:`, err);
                 }
             });
-        }).catch(err => {
+        }
+        catch (err) {
             console.error(`Failed to load strategy ${folder}:`, err);
-        });
+        }
     }
 }
-// Call this at startup
-loadStrategies();
-// Add authentication to routes
-app.get('/', authMiddleware, (req, res) => {
-    res.send('Ethquake Server is running. Go away.');
-});
-app.get('/health', authMiddleware, (req, res) => {
-    res.status(200).send({ status: 'ok' });
-});
-// Proper error handling to prevent crashes
-process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
-    logActivity({
-        type: 'UNCAUGHT_EXCEPTION',
-        error: error.message,
-        stack: error.stack
-    }).catch(err => console.error('Failed to log uncaught exception:', err));
-});
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    logActivity({
-        type: 'UNHANDLED_REJECTION',
-        reason: reason && typeof reason === 'object' && 'message' in reason ? reason.message : String(reason)
-    }).catch(err => console.error('Failed to log unhandled rejection:', err));
-});
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server');
-    server.close(() => {
-        console.log('HTTP server closed');
-        // Close database connection if needed
-        // disconnectFromDatabase()
-        process.exit(0);
-    });
-});
 // Keep the process alive with proper initialization
 async function startServer() {
     try {
-        // Select database in development mode
-        const dbName = await selectDatabase();
-        // Connect to MongoDB first
-        await connectToDatabase(typeof dbName === 'string' ? dbName : undefined);
+        // Load strategies first
+        await loadStrategies();
         // Start Express server
-        server = app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`Ethquake Server running on port ${PORT}.`);
-            logActivity({
-                type: 'SERVER_START',
-                port: PORT,
-                database: dbName
-            }).catch(err => console.error('Failed to log server start:', err));
         });
         // Add the router with authentication
         app.use('/api/transactions', authMiddleware, transactionDataRouter);
@@ -124,7 +102,7 @@ async function startServer() {
     catch (error) {
         console.error('Failed to start server:', error);
         // Important: Don't exit on startup error, retry instead
-        setTimeout(startServer, 5000);
+        setTimeout(() => startServer(), 5000);
     }
 }
 startServer();
@@ -135,35 +113,14 @@ setInterval(() => {
 // Status endpoint - might be useful someday, who knows
 app.get('/status', authMiddleware, async (req, res) => {
     try {
-        // First check if we're connected to the database
-        let db;
-        try {
-            db = await getDb();
-        }
-        catch (error) {
-            console.log('attempting reconnect - ', error);
-            // Try to reconnect
-            try {
-                await connectToDatabase();
-                db = await getDb();
-            }
-            catch (reconnectError) {
-                console.error('Failed to reconnect to database:', reconnectError);
-                res.status(500).json({
-                    status: 'degraded',
-                    error: 'Database connection unavailable',
-                    lastUpdate: new Date().toISOString()
-                });
-                return;
-            }
-        }
-        // If we've made it this far, MongoDB has graciously decided to work
-        const txCount = await db.collection('transactions').countDocuments();
-        const analysisCount = await db.collection('analysis_results').countDocuments();
+        const strategyStatuses = Object.entries(strategies).map(([name, strategy]) => ({
+            name,
+            enabled: strategy.config.enabled,
+            schedule: strategy.config.cronSchedule
+        }));
         res.json({
             status: 'operational',
-            transactions: txCount,
-            analysisResults: analysisCount,
+            strategies: strategyStatuses,
             lastUpdate: new Date().toISOString()
         });
     }

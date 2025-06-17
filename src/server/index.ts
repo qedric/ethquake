@@ -23,7 +23,6 @@ const authMiddleware = basicAuth({
 
 const app = express()
 const PORT = process.env.PORT || 8080
-let server: any = null
 
 const STRATEGIES_DIR = path.join(__dirname, '../strategies')
 
@@ -122,7 +121,7 @@ async function startServer() {
     await loadStrategies()
     
     // Start Express server
-    server = app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Ethquake Server running on port ${PORT}.`)
     })
 
