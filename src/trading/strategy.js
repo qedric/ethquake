@@ -1,10 +1,12 @@
 import { getDb , connectToDatabase } from '../lib/mongodb.js'
 import { placeOrder } from './kraken.js'
 import { getTechnicalIndicators } from './indicators.js'
+import { sendAlert } from '../lib/alerts.js'
 
-const COOLDOWN_HOURS = 48
-const SIGNAL_THRESHOLD = 20
-const POSITION_SIZE = 1.5
+const COOLDOWN_HOURS = 48 // no new trades within this time period
+const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
+const ALERT_THRESHOLD = 40 // if the most recent hour has a count exceeding this threshold, send an alert
+const POSITION_SIZE = 2
 
 /**
  * Executes the trading strategy based on:
@@ -35,19 +37,6 @@ export async function executeTradeStrategy() {
         // Wait a bit before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * connectionAttempts))
       }
-    }
-    
-    // Check for any trades within cooldown period
-    const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
-    const recentTrades = await db.collection('trading_signals')
-      .find({
-        created_at: { $gte: cooldownStart }
-      })
-      .toArray()
-
-    if (recentTrades.length > 0) {
-      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
-      return
     }
     
     // Instead of time-based query, get the two most recent records directly
@@ -81,8 +70,7 @@ export async function executeTradeStrategy() {
     let signalHour = null
     
     for (let i = 1; i < recentResults.length; i++) {
-      if (recentResults[i].count >= SIGNAL_THRESHOLD && 
-          recentResults[i-1].count >= SIGNAL_THRESHOLD) {
+      if ((recentResults[i].count + recentResults[i-1].count) >= SIGNAL_THRESHOLD) {
         signalDetected = true
         signalHour = recentResults[i].timestamp
         break
@@ -95,45 +83,53 @@ export async function executeTradeStrategy() {
     }
     
     console.log(`Signal detected at ${signalHour.toISOString()}`)
-    
+
     // Get technical indicators to determine direction
     const indicators = await getTechnicalIndicators()
-    const { ema20, ema50, ema100, ema200 } = indicators
+    const { price, ema20, ema50, ema100 } = indicators
     
     // Determine trade direction based on EMAs
     let direction = 'none'
+
+    console.log('current price:', price)
+    console.log('ema20:', ema20)
+    console.log('ema50:', ema50)
+    console.log('ema100:', ema100)
     
-    // Check if EMAs are in order for a bullish trend
-    if (ema20 > ema50 && ema50 > ema100 && ema100 > ema200) {
+    // New direction logic using price and three EMAs
+    if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
       direction = 'buy'
-    } 
-    // Check if EMAs are in order for a bearish trend
-    else if (ema20 < ema50 && ema50 < ema100 && ema100 < ema200) {
+    } else if (price < ema20 && ema20 < ema50 && ema50 < ema100) {
       direction = 'sell'
+    }
+
+    // Check for threshold breach and alert regardless other conditions
+    if (recentResults[recentResults.length-1].count >= ALERT_THRESHOLD) {
+      console.log(`Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
+      sendAlert(`Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
     }
     
     if (direction === 'none') {
       console.log('No clear direction from technical indicators, not trading')
-      return
-    }
-    
-    // Check if we already have an active signal for this hour
-    const existingSignal = await db.collection('trading_signals')
-      .findOne({ 
-        signal_hour: { 
-          $gte: new Date(signalHour.getTime()), 
-          $lt: new Date(signalHour.getTime() + 3600000) // One hour later
-        } 
-      })
-    
-    if (existingSignal) {
-      console.log(`Already processed signal for ${signalHour.toISOString()}`)
+      sendAlert('Signal detected - no clear direction - not trading.')
       return
     }
 
+     // Check for any trades within cooldown period
+     const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
+     const recentTrades = await db.collection('trading_signals')
+       .find({
+         created_at: { $gte: cooldownStart }
+       })
+       .toArray()
     
-    
-    
+
+    if (recentTrades.length > 0) {
+      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
+      sendAlert(`Signal detected - within cooldown period - would have taken ${direction} position`)
+      return
+    }
+
     // Place order
     console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
     const orderResult = await placeOrder(direction, POSITION_SIZE, false) // ETH position with 4% trailing stop
@@ -151,6 +147,8 @@ export async function executeTradeStrategy() {
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
+
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nTrailing Stop Order Result: ${orderResult?.trailingStopOrder?.sendStatus?.status || 'failed'}`)
     
     return {
       signalHour,
