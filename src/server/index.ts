@@ -24,7 +24,9 @@ const authMiddleware = basicAuth({
 const app = express()
 const PORT = process.env.PORT || 8080
 
-const STRATEGIES_DIR = path.join(__dirname, '../strategies')
+// In production, we're running from dist/server/index.js, so we need to look in dist/src/strategies
+// In development, we're running from src/server/index.ts, so we need to look in src/strategies
+const STRATEGIES_DIR = path.join(__dirname, process.env.NODE_ENV === 'production' ? '../src/strategies' : '../strategies')
 
 // Define types for strategy configuration and loaded strategy
 interface StrategyConfig {

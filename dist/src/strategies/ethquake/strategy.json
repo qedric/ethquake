@@ -1,0 +1,6 @@
+{
+  "name": "ethquake",
+  "enabled": true,
+  "description": "ETHQuake forewarns of impending large price movements in ETHUSD by monitoring blockchain activity of addresses of interest.",
+  "cronSchedule": "*/15 * * * *"
+} 
