@@ -1,21 +1,14 @@
-import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress'
-import { countTransactionsByHour } from './scripts/txCountByHour'
-import { executeTradeStrategy } from './strategy'
-import { getDb } from './database/mongodb'
+import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress.js'
+import { countTransactionsByHour } from './scripts/txCountByHour.js'
+import { executeTradeStrategy } from './strategy.js'
 
 export async function runPipelineTask() {
   try {
-    const db = await getDb()
-    const client = db.client
-
     // Update transactions data
-    const txResult = await updateTransactionsByAddressesOfInterest({
-      existingDb: db,
-      existingClient: client
-    })
+    const txResult = await updateTransactionsByAddressesOfInterest()
 
     // Run analysis
-    const analysisResults = await countTransactionsByHour(db, client)
+    const analysisResults = await countTransactionsByHour()
 
     // Only execute trading strategy in production
     if (process.env.NODE_ENV === 'production') {

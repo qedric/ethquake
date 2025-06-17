@@ -1,16 +1,21 @@
-import { getDb, connectToDatabase, logActivity } from '@/strategies/ethquake/database/mongodb'
-import { selectDatabase } from '@/strategies/ethquake/database/dbSelector'
+import { getDb, connectToDatabase, logActivity } from '../strategies/ethquake/database/mongodb.js'
+import { selectDatabase } from '../strategies/ethquake/database/dbSelector.js'
 import dotenv from 'dotenv'
-import transactionDataRouter from '@/api/transactionData'
-import visualizationRouter from '@/api/visualizationRouter'
+import transactionDataRouter from '../api/transactionData.js'
+import visualizationRouter from '../api/visualizationRouter.js'
 import path from 'path'
 import basicAuth from 'express-basic-auth'
 import express from 'express'
 import cron from 'node-cron'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // Basic authentication middleware
 const authMiddleware = basicAuth({
@@ -21,10 +26,6 @@ const authMiddleware = basicAuth({
 const app = express()
 const PORT = process.env.PORT || 8080
 let server: any = null
-
-// Define __dirname equivalent for ES modules
-// const __filename = fileURLToPath(import.meta.url)
-// const __dirname = path.dirname(__filename)
 
 const STRATEGIES_DIR = path.join(__dirname, '../strategies')
 

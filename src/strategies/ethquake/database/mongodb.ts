@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { MongoClient } from 'mongodb'
+import { MongoClient, Db } from 'mongodb'
 
 // Only load .env in development
 if (process.env.NODE_ENV !== 'production') {
@@ -13,15 +13,15 @@ if (!process.env.MONGODB_URI) {
 const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017'
 const defaultDbName = process.env.MONGO_DB_NAME || 'ethquake'
 
-let client = null
-let db = null
+let client: MongoClient | null = null
+let db: Db | null = null
 
 /**
  * Connects to MongoDB and returns a database instance
  * @param {string} [dbName] - Optional database name. If not provided, uses default from env
- * @returns {Promise<Object>} - Database instance
+ * @returns {Promise<Db>} - Database instance
  */
-async function connectToDatabase(dbName = defaultDbName) {
+async function connectToDatabase(dbName: string = defaultDbName): Promise<Db> {
   try {
     console.log(`Connecting to MongoDB database: ${dbName}...`)
     client = new MongoClient(uri, {
@@ -44,16 +44,16 @@ async function connectToDatabase(dbName = defaultDbName) {
 
 /**
  * Gets the default database instance
- * @returns {Promise<Object>} - Database instance
+ * @returns {Promise<Db>} - Database instance
  */
-async function getDb() {
+async function getDb(): Promise<Db> {
   if (!db) {
     db = await connectToDatabase()
   }
   return db
 }
 
-async function logActivity(activity) {
+async function logActivity(activity: Record<string, any>) {
   try {
     const db = await getDb()
     await db.collection('activity_log').insertOne({
@@ -68,4 +68,4 @@ async function logActivity(activity) {
 
 // Usage example: logActivity({ type: 'TRANSACTION_FETCH', count: transactions.length })
 
-export { getDb, connectToDatabase, logActivity }
+export { getDb, connectToDatabase, logActivity, client }

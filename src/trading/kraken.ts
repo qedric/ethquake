@@ -16,16 +16,16 @@ const API_SECRET = process.env.KRAKEN_PRIVATE_KEY
 * @param {string} nonce
 * @param {string} data
 */
-function getKrakenSignature(urlPath, nonce, data) {
+function getKrakenSignature(urlPath: string, nonce: string, data: string) {
   const encoded = data + nonce + urlPath
   const sha256Hash = crypto.createHash('sha256').update(encoded).digest()
-  const secretBuffer = Buffer.from(API_SECRET, 'base64')
+  const secretBuffer = Buffer.from(API_SECRET || '', 'base64')
   const hmac = crypto.createHmac('sha512', secretBuffer).update(sha256Hash)
   const signature = hmac.digest('base64')
   return signature
 }
 
-async function sendOrder(payload) {
+async function sendOrder(payload: any) {
 
   const BaseURL = 'https://futures.kraken.com'
   const nonce = Date.now().toString()
@@ -48,7 +48,7 @@ async function sendOrder(payload) {
   try {
     return await axios.request(config)
   } catch (error) {
-    console.error('API Error:', error.response?.data || error.message)
+    console.error('API Error:', (error as any).response?.data || (error as any).message)
     throw error
   }
 }
@@ -59,7 +59,7 @@ async function sendOrder(payload) {
  * @param {number} size - Position size in ETH
  * @param {object} options - Additional order options
  */
-export async function placeOrder(side, size, marketOnly) {
+export async function placeOrder(side: string, size: number, marketOnly: boolean) {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
   }
@@ -111,7 +111,7 @@ export async function placeOrder(side, size, marketOnly) {
     console.error('Error placing order:', error)
     return {
       status: 'failed',
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     }
   }
 }
@@ -135,13 +135,13 @@ export async function getOpenPositions() {
   try {
     return await axios.request(config)
   } catch (error) {
-    console.error('API Error:', error.response?.data || error.message)
+    console.error('API Error:', (error as any).response?.data || (error as any).message)
     throw error
   }
 
 }
 
-export async function getOrderStatus(orderId) {
+export async function getOrderStatus(orderId: string) {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
   }
@@ -172,7 +172,7 @@ export async function getOrderStatus(orderId) {
     }
     throw new Error('Order not found or invalid response')
   } catch (error) {
-    console.error('API Error:', error.response?.data || error.message)
+    console.error('API Error:', (error as any).response?.data || (error as any).message)
     throw error
   }
 }

@@ -1,5 +1,5 @@
-import { sendTelegramAlert } from './telegram.ts'
+import { sendTelegramAlert } from './telegram.js'
 
-export const sendAlert = (message) => {
+export const sendAlert = (message: string) => {
     sendTelegramAlert(message)
 }

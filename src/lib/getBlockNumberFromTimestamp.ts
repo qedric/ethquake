@@ -8,8 +8,8 @@ dotenv.config()
 
 // Create thirdweb client
 const client = createThirdwebClient({
-  secretKey: process.env.TW_SECRET_KEY,
-  clientId: process.env.TW_CLIENT_ID
+  secretKey: process.env.TW_SECRET_KEY || '',
+  clientId: process.env.TW_CLIENT_ID || ''
 })
 
 /**
@@ -17,7 +17,7 @@ const client = createThirdwebClient({
  * @param {number} timestamp - UNIX timestamp in seconds
  * @returns {Promise<number>} - Block number
  */
-async function getBlockNumberFromTimestamp(timestamp) {
+async function getBlockNumberFromTimestamp(timestamp: number) {
   try {
     // Get RPC URL for Ethereum mainnet (chain ID 1)
     const rpcUrl = getRpcUrlForChain({ chain: 1, client })

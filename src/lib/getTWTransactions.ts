@@ -19,7 +19,7 @@ if (!TW_CLIENT_ID) {
  * @param {Object} options - Filter options for the API query
  * @returns {Array} Array of transaction objects
  */
-export async function fetchTransactions(options = {}) {
+export async function fetchTransactions(options: Record<string, any> = {}) {
   try {
     // Base URL with chain and client ID
     let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
@@ -48,15 +48,15 @@ export async function fetchTransactions(options = {}) {
     const response = await axios.get(url)
     return response.data.data || [] 
   } catch (error) {
-    console.error('Error fetching transactions:', error.message)
-    if (error.response) {
-      const data = error.response.data
+    console.error('Error fetching transactions:', error instanceof Error ? error.message : String(error))
+    if (error instanceof Error && 'response' in error) {
+      const data = (error as any).response.data
       if (typeof data === 'string' && data.trim().toLowerCase().startsWith('<!doctype html')) {
         console.error('Response data: [HTML error page skipped]')
       } else {
         console.error('Response data:', data)
       }
-      console.error('Response status:', error.response.status)
+      console.error('Response status:', (error as any).response.status)
     }
     return [] // Return empty array on error
   }

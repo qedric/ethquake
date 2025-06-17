@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { getDb } from '@/strategies/ethquake/database/mongodb.ts'
+import { getDb } from '../database/mongodb.js'
 
 // Load env vars
 dotenv.config()
@@ -35,7 +35,7 @@ async function cleanupRecentAddresses(minutes = 30) {
   
   rl.close()
   
-  if (answer.toLowerCase() !== 'y') {
+  if (typeof answer === 'string' && answer.toLowerCase() !== 'y') {
     console.log('Cleanup cancelled')
     return
   }
@@ -50,12 +50,12 @@ async function cleanupRecentAddresses(minutes = 30) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const minutes = parseInt(process.argv[2]) || 30
   
-  let client // Store the MongoDB client for closing
+  let client: any // Store the MongoDB client for closing
   
   getDb()
     .then(db => {
       // Store reference to client for later closing
-      client = db.client
+      client = (db as any).client
       return cleanupRecentAddresses(minutes)
     })
     .then(() => {
@@ -71,7 +71,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log('Closing MongoDB connection...')
         client.close()
           .then(() => console.log('MongoDB connection closed'))
-          .catch(err => console.error('Error closing MongoDB connection:', err))
+          .catch((err: any) => console.error('Error closing MongoDB connection:', err))
       }
     })
 }

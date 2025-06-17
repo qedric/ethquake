@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import dotenv from 'dotenv'
-import { fetchTransactions } from '@/lib/getTWTransactions.js'
+import { fetchTransactions } from '../../../../lib/getTWTransactions.js'
 
 /* 
     For step 2 (transactions before price movements):
@@ -33,7 +33,7 @@ if (!TW_CLIENT_ID) {
 }
 
 // Read timestamps from the specified file
-async function readTimestamps(filePath) {
+async function readTimestamps(filePath: string) {
   try {
     const fullPath = path.isAbsolute(filePath) 
       ? filePath 
@@ -49,7 +49,7 @@ async function readTimestamps(filePath) {
 }
 
 // Generate control timestamps evenly distributed between min and max timestamps
-function generateControlTimestamps(priceMovements, count) {
+function generateControlTimestamps(priceMovements: any[], count: number) {
   // Sort timestamps chronologically
   const sortedMovements = [...priceMovements].sort((a, b) => a.timestamp - b.timestamp)
   
@@ -70,7 +70,7 @@ function generateControlTimestamps(priceMovements, count) {
 }
 
 // Process transactions before price movements (Step 2)
-async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHours = 1) {
+async function getTransactionsBeforePriceMovements(timestampFilePath: string, lookbackHours = 1) {
   try {
     // Ensure output directory exists
     if (!fs.existsSync(OUTPUT_DIR)) {
@@ -93,7 +93,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Processing price movement ${i+1}/${priceMovements.length} at ${movement.date}`)
       
       // Fetch transactions for the period before the price movement
-      const transactions = fetchTransactions({
+      const transactions = await fetchTransactions({
         filter_block_timestamp_gte: startTimestamp,
         filter_block_timestamp_lte: movementTimestamp,
         sort_by: 'block_number',
@@ -103,7 +103,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
       console.log(`Found ${transactions.length} transactions before this price movement`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.map(tx => ({
+      const processedTxs = transactions.map((tx: any) => ({
         ...tx,
         valueString: tx.value.toString(),
         priceMovementTimestamp: movementTimestamp,
@@ -137,7 +137,7 @@ async function getTransactionsBeforePriceMovements(timestampFilePath, lookbackHo
 }
 
 // Process transactions for control group (Step 3)
-async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1) {
+async function getControlGroupTransactions(timestampFilePath: string, lookbackHours = 1) {
   try {
     // Ensure output directory exists
     if (!fs.existsSync(OUTPUT_DIR)) {
@@ -163,7 +163,7 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Processing control period ${i+1}/${controlTimestamps.length} at ${control.date}`)
       
       // Fetch transactions for the control period
-      const transactions = fetchTransactions({
+      const transactions = await fetchTransactions({
         filter_block_timestamp_gte: startTimestamp,
         filter_block_timestamp_lte: controlTimestamp,
         sort_by: 'block_number',
@@ -173,7 +173,7 @@ async function getControlGroupTransactions(timestampFilePath, lookbackHours = 1)
       console.log(`Found ${transactions.length} transactions in this control period`)
       
       // Add to our collection with metadata
-      const processedTxs = transactions.map(tx => ({
+      const processedTxs = transactions.map((tx: any) => ({
         ...tx,
         controlTimestamp: controlTimestamp,
         controlDateTime: control.date,

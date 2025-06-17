@@ -1,7 +1,7 @@
 import { getDb , connectToDatabase } from './database/mongodb.js'
-import { placeOrder } from '@/trading/kraken.js'
-import { getTechnicalIndicators } from '@/trading/indicators.js'
-import { sendAlert } from '@/alerts/index.js'
+import { placeOrder } from '../../trading/kraken.js'
+import { getTechnicalIndicators } from '../../trading/indicators.js'
+import { sendAlert } from '../../alerts/index.js'
 
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
@@ -37,6 +37,10 @@ export async function executeTradeStrategy() {
         // Wait a bit before retrying
         await new Promise(resolve => setTimeout(resolve, 1000 * connectionAttempts))
       }
+    }
+
+    if (!db) {
+      throw new Error('Failed to connect to database')
     }
     
     // Instead of time-based query, get the two most recent records directly

@@ -9,7 +9,7 @@ dotenv.config()
  * @param {Number} period - SMA period length
  * @returns {Number} - The SMA value
  */
-function calculateSMA(prices, period) {
+function calculateSMA(prices: number[], period: number) {
   if (prices.length < period) {
     throw new Error(`Not enough price data to calculate ${period} SMA`)
   }
@@ -33,7 +33,7 @@ function calculateSMA(prices, period) {
  * @param {Number} period - EMA period length
  * @returns {Number} - The EMA value
  */
-function calculateEMA(prices, period) {
+function calculateEMA(prices: number[], period: number) {
   if (prices.length < period) {
     throw new Error(`Not enough price data to calculate ${period} EMA`)
   }
@@ -92,7 +92,7 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
     
     // Kraken returns data in format [time, open, high, low, close, vwap, volume, count]
     // Extract just the closing prices (index 4)
-    return pairData.map(candle => parseFloat(candle[4]))
+    return pairData.map((candle: any) => parseFloat(candle[4]))
   } catch (error) {
     console.error('Error fetching Kraken OHLC data:', error)
     throw error

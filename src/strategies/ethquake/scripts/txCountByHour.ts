@@ -1,4 +1,4 @@
-import { getDb, connectToDatabase } from '@/strategies/ethquake/database/mongodb.js'
+import { getDb, connectToDatabase } from '../database/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load env vars because apparently we need to do this in every file
@@ -7,12 +7,12 @@ dotenv.config()
 /**
  * Outputs hourly transaction counts for addresses of interest
  */
-async function countTransactionsByHour(existingDb = null, existingClient = null) {
+async function countTransactionsByHour(existingDb: any = null, existingClient: any = null) {
   console.log('Starting transaction analysis from MongoDB...')
   
   // Use existing connection or create new one
   const db = existingDb || await getDb()
-  let client = existingClient || db.client // For closing connection later
+  let client = existingClient || (db as any).client // For closing connection later
   const shouldCloseConnection = !existingDb // Only close if we created a new connection
   
   try {
@@ -54,7 +54,7 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     }
     
     // Format the results for display (only for console output)
-    const output = results.map(r => {
+    const output = results.map((r: any) => {
       const date = new Date(r._id.hourDate)
       // Format DD/MM/YY in UTC
       const day = date.getUTCDate().toString().padStart(2, '0')
@@ -75,7 +75,7 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     console.log(last24HrsOutput || 'No transactions in the last 24 hours')
     
     // Prepare data for storing in MongoDB with proper date handling
-    const analysisResults = results.map(r => {
+    const analysisResults = results.map((r: any) => {
       const timestamp = new Date(r._id.hourDate)
       const hour = timestamp.getUTCHours()
       
@@ -96,17 +96,17 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
     
     // Create a map of existing entries for easier lookup
     const existingEntriesMap = new Map()
-    existingEntries.forEach(entry => {
+    existingEntries.forEach((entry: any) => {
       // Use timestamp as the key
       const key = entry.timestamp.getTime()
       existingEntriesMap.set(key, { id: entry._id, count: entry.count })
     })
     
     // Separate results into new entries and updates
-    const newResults = []
-    const updatesToMake = []
+    const newResults: any[] = []
+    const updatesToMake: any[] = []
     
-    analysisResults.forEach(result => {
+    analysisResults.forEach((result: any) => {
       const key = result.timestamp.getTime()
       const existingEntry = existingEntriesMap.get(key)
       
@@ -165,7 +165,7 @@ async function countTransactionsByHour(existingDb = null, existingClient = null)
 }
 
 // Format date and hour for display (DD/MM/YY - HH)
-function formatDateHour(date) {
+function formatDateHour(date: any) {
   const day = date.getUTCDate().toString().padStart(2, '0')
   const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
   const year = date.getUTCFullYear().toString().substring(2)
@@ -174,13 +174,13 @@ function formatDateHour(date) {
 }
 
 // Get list of addresses of interest from MongoDB
-async function getAddressesOfInterest(db) {
+async function getAddressesOfInterest(db: any) {
   const addresses = await db.collection('addresses_of_interest')
     .find({})
     .project({ address: 1, _id: 0 })
     .toArray()
   
-  return addresses.map(a => a.address)
+  return addresses.map((a: any) => a.address)
 }
 
 // Migrate data from old collection to new one
@@ -201,7 +201,7 @@ async function migrateToNewCollection() {
     }
     
     // Convert to new format
-    const newEntries = oldEntries.map(entry => {
+    const newEntries = oldEntries.map((entry: any) => {
       // Parse DD/MM/YY format
       const [day, month, year] = entry.date.split('/')
       const hour = parseInt(entry.hour)
@@ -244,7 +244,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   
   // Add migration if needed
   if (shouldMigrate) {
-    chain = chain.then(() => migrateToNewCollection())
+    chain = chain.then(() => migrateToNewCollection()) as any
   }
   
   // Run the analysis

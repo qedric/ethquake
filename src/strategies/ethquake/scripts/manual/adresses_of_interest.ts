@@ -1,5 +1,7 @@
 import fs from 'fs'
 import path from 'path'
+// Use a type alias for Hex
+export type Hex = string
 
 /* 
 
@@ -9,7 +11,7 @@ import path from 'path'
 
 // Load transaction data from files
 // You'll need to have these files with your transaction data
-const loadTransactionData = (filePath) => {
+const loadTransactionData = (filePath: string) => {
   try {
     const data = fs.readFileSync(filePath, 'utf8')
     const parsed = JSON.parse(data)
@@ -22,20 +24,13 @@ const loadTransactionData = (filePath) => {
 }
 
 // Extract unique addresses from transactions
-const extractAddresses = (transactions) => {
-  const addresses = new Set()
-  
-  transactions.forEach(tx => {
-    if (tx.from_address) addresses.add(tx.from_address.toLowerCase())
-    if (tx.to_address) addresses.add(tx.to_address.toLowerCase())
-  })
-  
-  return addresses
-}
-
-// Find addresses that are in targetAddresses but not in controlAddresses
-const findAddressesOfInterest = (targetAddresses, controlAddresses) => {
-  return [...targetAddresses].filter(address => !controlAddresses.has(address))
+const extractAddresses = (transactions: any[]): Hex[] => {
+  const addresses = new Set<Hex>()
+  for (const tx of transactions) {
+    if (tx.from_address) addresses.add(tx.from_address as Hex)
+    if (tx.to_address) addresses.add(tx.to_address as Hex)
+  }
+  return Array.from(addresses)
 }
 
 // Main function
@@ -43,25 +38,26 @@ const identifyAddressesOfInterest = (
   targetFilePath = './data/target_transactions.json',
   controlFilePath = './data/control_transactions.json',
   outputFilePath = './data/addresses_of_interest.json'
-) => {
+): any[] => {
   // Load transaction data
   const targetTransactions = loadTransactionData(path.resolve(targetFilePath))
   const controlTransactions = loadTransactionData(path.resolve(controlFilePath))
   
   if (!targetTransactions.data || !controlTransactions.data) {
     console.error('Missing transaction data. Make sure your data files exist.')
-    return
+    return []
   }
   
   // Extract unique addresses
   const targetAddresses = extractAddresses(targetTransactions.data)
   const controlAddresses = extractAddresses(controlTransactions.data)
+  const controlSet = new Set(controlAddresses)
   
-  console.log(`Found ${targetAddresses.size} unique addresses in target transactions`)
-  console.log(`Found ${controlAddresses.size} unique addresses in control transactions`)
+  console.log(`Found ${targetAddresses.length} unique addresses in target transactions`)
+  console.log(`Found ${controlAddresses.length} unique addresses in control transactions`)
   
   // Find addresses of interest
-  const addressesOfInterest = findAddressesOfInterest(targetAddresses, controlAddresses)
+  const addressesOfInterest = targetAddresses.filter(addr => !controlSet.has(addr))
   
   console.log(`Found ${addressesOfInterest.length} addresses of interest`)
   

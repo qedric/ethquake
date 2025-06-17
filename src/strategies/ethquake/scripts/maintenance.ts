@@ -1,6 +1,6 @@
 import dotenv from 'dotenv'
-import { getDb, connectToDatabase } from '@/strategies/ethquake/database/mongodb.ts'
-import { fetchTransactions } from '@/lib/getTWTransactions.ts'
+import { connectToDatabase } from '../database/mongodb.js'
+import { fetchTransactions } from '../../../lib/getTWTransactions.js'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import readline from 'readline'
@@ -48,7 +48,7 @@ async function promptForDatabase() {
  * @param {string} dbType - 'A' or 'B'
  * @returns {Promise<Object>} - Database connection
  */
-async function getDatabase(dbType) {
+async function getDatabase(dbType: 'A' | 'B') {
   const dbName = dbType === 'B' ? 'ethquake_b' : 'ethquake'
   console.log(`Connecting to database: ${dbName}`)
   const db = await connectToDatabase(dbName)
@@ -69,7 +69,7 @@ async function getDatabase(dbType) {
  * @param {number} timestamp - UNIX timestamp of the price movement
  * @param {string} dbType - 'A' or 'B'
  */
-async function addTimestamp(timestamp, dbType) {
+async function addTimestamp(timestamp: number, dbType: 'A' | 'B') {
   const db = await getDatabase(dbType)
   
   // Convert timestamp to Date object in UTC
@@ -99,7 +99,7 @@ async function addTimestamp(timestamp, dbType) {
  * Lists all timestamps in the price_movements collection
  * @param {string} dbType - 'A' or 'B'
  */
-async function listAllTimestamps(dbType) {
+async function listAllTimestamps(dbType: 'A' | 'B') {
   const db = await getDatabase(dbType)
   const timestamps = await db.collection('price_movements')
     .find({})
@@ -118,7 +118,7 @@ async function listAllTimestamps(dbType) {
  * @param {string} timestamps - Comma-separated list of UNIX timestamps
  * @param {string} dbType - 'A' or 'B'
  */
-async function addTimestamps(timestamps, dbType) {
+async function addTimestamps(timestamps: string, dbType: 'A' | 'B') {
   const db = await getDatabase(dbType)
   
   try {
@@ -194,7 +194,7 @@ async function addTimestamps(timestamps, dbType) {
  * @param {number} batchSize - Number of most recent movements to process
  * @param {string} dbType - 'A' or 'B'
  */
-async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
+async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType: 'A' | 'B') {
   const db = await getDatabase(dbType)
   
   // Get the most recent price movements, regardless of processed status
@@ -212,7 +212,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
   console.log(`Processing ${recentMovements.length} most recent price movements together in database ${dbType}...`)
   
   // Collect all target transactions
-  const allTargetTransactions = []
+  const allTargetTransactions:any[] = []
   for (const movement of recentMovements) {
     console.log(`\nFetching target transactions for movement at ${new Date(movement.timestamp * 1000).toISOString()}...`)
     
@@ -323,7 +323,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType) {
       output: process.stdout
     })
     
-    const answer = await new Promise(resolve => {
+    const answer = await new Promise<string>(resolve => {
       rl.question('> ', resolve)
     })
     
@@ -363,7 +363,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1)
   }
   
-  let client // Store the MongoDB client for closing
+  let client: any // Store the MongoDB client for closing
   
   promptForDatabase()
     .then(dbType => {
@@ -374,10 +374,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         if (!timestamps) {
           throw new Error('Please provide comma-separated timestamps')
         }
-        return addTimestamps(timestamps, dbType)
+        return addTimestamps(timestamps as string, dbType as 'A' | 'B')
       } else if (command === 'get-new-addresses') {
         const batchSize = parseInt(process.argv[3]) || DEFAULT_BATCH_SIZE
-        return getNewAddresses(batchSize, dbType)
+        return getNewAddresses(batchSize, dbType as 'A' | 'B')
       } else {
         throw new Error(`Unknown command: ${command}`)
       }
@@ -385,7 +385,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .then(() => {
       console.log('Command completed successfully')
     })
-    .catch(err => {
+    .catch((err: any) => {
       console.error('Command failed:', err)
       process.exit(1)
     })
@@ -395,7 +395,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log('Closing MongoDB connection...')
         client.close()
           .then(() => console.log('MongoDB connection closed'))
-          .catch(err => console.error('Error closing MongoDB connection:', err))
+          .catch((err: any) => console.error('Error closing MongoDB connection:', err))
       }
     })
 }

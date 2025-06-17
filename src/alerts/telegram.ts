@@ -6,7 +6,7 @@ const APPROVED_CHAT_IDS = [252360572, 1895974263] // Hard-coded for now, we can 
  * @param {string} message - The message to send
  * @returns {Promise<void>}
  */
-export async function sendTelegramAlert(message) {
+export async function sendTelegramAlert(message: string) {
   if (!process.env.TELEGRAM_BOT_API_KEY) {
     console.error('TELEGRAM_BOT_API_KEY not found in environment variables')
     return

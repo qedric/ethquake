@@ -3,10 +3,13 @@ import { connectToDatabase } from '../strategies/ethquake/database/mongodb.js'
 
 const router = express.Router()
 
-router.get('/hourly', async (req, res) => {
+router.get('/hourly', async (req, res): Promise<void> => {
   try {
     // Use the db query parameter if provided, otherwise use default
-    const dbName = req.query.db || process.env.MONGO_DB_NAME || 'ethquake'
+    let dbName: string | undefined = process.env.MONGO_DB_NAME || 'ethquake'
+    if (typeof req.query.db === 'string') {
+      dbName = req.query.db
+    }
     const db = await connectToDatabase(dbName)
     
     // Get data from MongoDB
@@ -25,16 +28,15 @@ router.get('/hourly', async (req, res) => {
 
     // If we have no data, return empty array
     if (formattedData.length === 0) {
-      return res.json([])
+      res.json([])
+      return
     }
     
-    return res.json(formattedData)
+    res.json(formattedData)
   } catch (error) {
     console.error('Failed to fetch transaction data:', error)
-    return res.status(500).json({ error: 'Failed to fetch transaction data' })
+    res.status(500).json({ error: 'Failed to fetch transaction data' })
   }
 })
-
-
 
 export default router 

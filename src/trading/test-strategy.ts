@@ -1,4 +1,4 @@
-import { executeTradeStrategy } from '@/strategies/ethquake/strategy.js'
+import { executeTradeStrategy } from '../strategies/ethquake/strategy.js'
 import dotenv from 'dotenv'
 
 // Load environment variables - you better have these set up

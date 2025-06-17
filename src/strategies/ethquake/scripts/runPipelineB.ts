@@ -11,7 +11,7 @@ dotenv.config()
  * @param {number} [fromTimestamp] - Optional start timestamp in seconds
  * @param {number} [toTimestamp] - Optional end timestamp in seconds
  */
-async function runPipelineB(fromTimestamp = null, toTimestamp = null) {
+async function runPipelineB(fromTimestamp: number | null | undefined = null, toTimestamp: number | null | undefined = null) {
   console.log('Running data pipeline B (TESTING ONLY):', new Date().toISOString())
   if (fromTimestamp) {
     console.log(`Using start timestamp: ${fromTimestamp}`)
@@ -20,17 +20,17 @@ async function runPipelineB(fromTimestamp = null, toTimestamp = null) {
     console.log(`Using end timestamp: ${toTimestamp}`)
   }
   
-  let client = null
+  let client: any | null = null
   
   try {
     // Connect to the B database
     const db = await connectToDatabase('ethquake_b')
-    client = db.client
+    client = (db as any).client
     
     // Update transactions data using collection B
     console.log('Updating transactions data for collection B...')
     const txResult = await updateTransactionsByAddressesOfInterest({
-      minEthValue: process.env.MIN_ETH_VALUE || 100,
+      minEthValue: parseInt(process.env.MIN_ETH_VALUE || '100'),
       fromTimestamp,
       toTimestamp,
       existingDb: db
@@ -39,7 +39,7 @@ async function runPipelineB(fromTimestamp = null, toTimestamp = null) {
     
     // Run analysis for collection B
     console.log('Running transaction analysis for collection B...')
-    const analysisResults = await countTransactionsByHour(db, null, true) // Pass db and useCollectionB=true
+    const analysisResults = await countTransactionsByHour(db, client) as any[] // Pass db and useCollectionB=true
     console.log(`Analysis complete with ${analysisResults?.length || 0} hourly results for collection B`)
     
     // Skip trade execution for Collection B
@@ -48,7 +48,7 @@ async function runPipelineB(fromTimestamp = null, toTimestamp = null) {
     return { success: true }
   } catch (error) {
     console.error('Error in data pipeline B:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
   } finally {
     // Close the MongoDB connection
     if (client) {
