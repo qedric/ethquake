@@ -121,7 +121,7 @@ async function startServer() {
     await loadStrategies()
     
     // Start Express server
-    const server = app.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Ethquake Server running on port ${PORT}.`)
     })
 
