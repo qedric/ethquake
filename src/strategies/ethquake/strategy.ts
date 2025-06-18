@@ -1,12 +1,19 @@
-import { getDb , connectToDatabase } from './database/mongodb.js'
+import { getDb } from '../../lib/mongodb.js'
 import { placeOrder } from '../../trading/kraken.js'
-import { getTechnicalIndicators } from '../../trading/indicators.js'
+import { getEMAs } from '../../trading/indicators.js'
 import { sendAlert } from '../../alerts/index.js'
 
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
 const ALERT_THRESHOLD = 40 // if the most recent hour has a count exceeding this threshold, send an alert
 const POSITION_SIZE = 2
+const TRADING_PAIR = 'PF_ETHUSD'
+const STOP_CONFIG = { type: 'trailing' as const, distance: 4 } // 4% trailing stop
+
+// Constants
+const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
+const MAX_CONNECTION_ATTEMPTS = 3
+const CONNECTION_RETRY_DELAY = 1000 // 1 second between connection attempts
 
 /**
  * Executes the trading strategy based on:
@@ -15,27 +22,27 @@ const POSITION_SIZE = 2
  * 
  * Strategy:
  * - Enter when there are two consecutive hours with counts over 20
- * - Use EMAs (20, 50, 100, 200) to determine direction
+ * - Use EMAs (20, 50, 100) to determine direction
  */
 export async function executeTradeStrategy() {
   try {
     // First try to get the database
     let db = null
     let connectionAttempts = 0
-    const MAX_ATTEMPTS = 3
     
-    while (!db && connectionAttempts < MAX_ATTEMPTS) {
+    while (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
       try {
         connectionAttempts++
-        await connectToDatabase() // Always reconnect first
-        db = await getDb()
+        // getDb will handle the connection internally
+        db = await getDb(DB_NAME)
+        break // If we get here, connection succeeded
       } catch (error) {
         console.log(`Database connection attempt ${connectionAttempts} failed - ${error instanceof Error ? error.message : String(error)}`)
-        if (connectionAttempts >= MAX_ATTEMPTS) {
-          throw new Error(`Failed to connect to database after ${MAX_ATTEMPTS} attempts`)
+        if (connectionAttempts === MAX_CONNECTION_ATTEMPTS) {
+          throw new Error('Max connection attempts reached')
         }
-        // Wait a bit before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000 * connectionAttempts))
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, CONNECTION_RETRY_DELAY))
       }
     }
 
@@ -89,11 +96,12 @@ export async function executeTradeStrategy() {
     console.log(`Signal detected at ${signalHour.toISOString()}`)
 
     // Get technical indicators to determine direction
-    const indicators = await getTechnicalIndicators()
+    const [indicators] = await getEMAs('ETHUSD', 15, [20, 50, 100]) // Get just current candle
     const { price, ema20, ema50, ema100 } = indicators
     
     // Determine trade direction based on EMAs
-    let direction = 'none'
+    type Direction = 'buy' | 'sell' | 'none'
+    let direction: Direction = 'none'
 
     console.log('current price:', price)
     console.log('ema20:', ema20)
@@ -135,9 +143,12 @@ export async function executeTradeStrategy() {
     }
 
     // Place order
-    console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-    const orderResult = await placeOrder(direction, POSITION_SIZE, false) // ETH position with 4% trailing stop
-    
+    let orderResult = null
+    if (direction === 'buy' || direction === 'sell') {
+      console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
+      orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, TRADING_PAIR)
+    }
+
     // Record the signal and order in the database
     await db.collection('trading_signals').insertOne({
       signal_hour: signalHour,
@@ -146,13 +157,13 @@ export async function executeTradeStrategy() {
       ema_data: indicators,
       market_order_id: orderResult?.marketOrder?.sendStatus?.order_id || null,
       market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
-      trailing_stop_order_id: orderResult?.trailingStopOrder?.sendStatus?.order_id || null,
-      trailing_stop_status: orderResult?.trailingStopOrder?.sendStatus?.status || 'failed',
+      stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
+      stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
 
-    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nTrailing Stop Order Result: ${orderResult?.trailingStopOrder?.sendStatus?.status || 'failed'}`)
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nStop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}`)
     
     return {
       signalHour,
