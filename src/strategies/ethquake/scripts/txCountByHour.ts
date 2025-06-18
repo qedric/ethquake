@@ -1,4 +1,4 @@
-import { getDb, connectToDatabase } from '../database/mongodb.js'
+import { getDb } from '../../../lib/mongodb.js'
 import dotenv from 'dotenv'
 
 // Load env vars because apparently we need to do this in every file
@@ -11,7 +11,7 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
   console.log('Starting transaction analysis from MongoDB...')
   
   // Use existing connection or create new one
-  const db = existingDb || await getDb()
+  const db = existingDb || await getDb('ethquake')
   let client = existingClient || (db as any).client // For closing connection later
   const shouldCloseConnection = !existingDb // Only close if we created a new connection
   
@@ -188,8 +188,7 @@ async function migrateToNewCollection() {
   console.log('Migrating data from analysis_results to transactions_per_hour...')
   
   try {
-    await connectToDatabase()
-    const db = await getDb()
+    const db = await getDb('ethquake')
     
     // Get all entries from old collection
     const oldEntries = await db.collection('analysis_results').find({}).toArray()

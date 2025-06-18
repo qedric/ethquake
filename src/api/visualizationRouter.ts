@@ -1,10 +1,13 @@
 import express from 'express'
-import { getDb } from '../strategies/ethquake/database/mongodb.js'
+import { getDb } from '../lib/mongodb.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const router = express.Router()
+
+// Constants
+const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
 
 // Serve the chart page
 router.get('/', (req, res) => {
@@ -14,7 +17,7 @@ router.get('/', (req, res) => {
 // API endpoint to get chart data
 router.get('/data', async (req, res) => {
   try {
-    const db = await getDb()
+    const db = await getDb(DB_NAME)
     const transactions = await db.collection('analysis_results')
       .find({})
       .sort({ timestamp: 1 })

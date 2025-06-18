@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { getDb } from '../database/mongodb.js'
+import { getDb } from '../../../lib/mongodb.js'
 import { getBlockNumberFromTimestamp } from '../../../lib/getBlockNumberFromTimestamp.js'
 import { fetchTransactions } from '../../../lib/getTWTransactions.js'
 import { MongoClient } from 'mongodb'
@@ -42,6 +42,9 @@ dotenv.config()
 const DEFAULT_MIN_ETH = 100
 const WEI_TO_ETH = 1e18
 
+// Constants
+const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
+
 /**
  * Updates transactions for addresses of interest by fetching new ones since the specified block
  * 
@@ -65,7 +68,7 @@ async function updateTransactionsByAddressesOfInterest({
   existingClient?: MongoClient | null
 } = {}) {
   // Get MongoDB connection
-  const db = existingDb || await getDb()
+  const db = existingDb || await getDb(DB_NAME)
   console.log(`Using database: ${db.databaseName}`)
   const client = existingClient
   const shouldCloseConnection = !existingDb
@@ -250,7 +253,7 @@ async function updateTransactionsByAddressesOfInterest({
 
 async function saveTransactionsToMongo(transactions: any[], collectionName = 'transactions') {
   try {
-    const db = await getDb()
+    const db = await getDb(DB_NAME)
     const collection = db.collection(collectionName)
     
     // Create a bulk operation

@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { connectToDatabase } from '@/strategies/ethquake/database/mongodb.js'
+import { getDb } from '../../../lib/mongodb.js'
 import { updateTransactionsByAddressesOfInterest } from './updateTransactionsByAddress.js'
 import { countTransactionsByHour } from './txCountByHour.js'
 
@@ -24,7 +24,7 @@ async function runPipelineB(fromTimestamp: number | null | undefined = null, toT
   
   try {
     // Connect to the B database
-    const db = await connectToDatabase('ethquake_b')
+    const db = await getDb('ethquake_b')
     client = (db as any).client
     
     // Update transactions data using collection B

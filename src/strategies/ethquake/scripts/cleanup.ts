@@ -1,11 +1,14 @@
 import dotenv from 'dotenv'
-import { getDb } from '../database/mongodb.js'
+import { getDb } from '../../../lib/mongodb.js'
 
 // Load env vars
 dotenv.config()
 
+// Constants
+const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
+
 async function cleanupRecentAddresses(minutes = 30) {
-  const db = await getDb()
+  const db = await getDb(DB_NAME)
   const cutoffTime = new Date(Date.now() - (minutes * 60 * 1000))
   
   console.log(`Looking for addresses added after ${cutoffTime.toISOString()}`)
@@ -46,17 +49,28 @@ async function cleanupRecentAddresses(minutes = 30) {
   console.log(`Removed ${result.deletedCount} addresses`)
 }
 
+async function cleanup() {
+  try {
+    const db = await getDb(DB_NAME)
+    // ... rest of code ...
+    return cleanupRecentAddresses()
+  } catch (error) {
+    console.error('Error:', error)
+    process.exit(1)
+  }
+}
+
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   const minutes = parseInt(process.argv[2]) || 30
   
   let client: any // Store the MongoDB client for closing
   
-  getDb()
+  getDb(DB_NAME)
     .then(db => {
       // Store reference to client for later closing
       client = (db as any).client
-      return cleanupRecentAddresses(minutes)
+      return cleanup()
     })
     .then(() => {
       console.log('Cleanup completed successfully')

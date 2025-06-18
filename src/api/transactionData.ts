@@ -1,5 +1,5 @@
 import express from 'express'
-import { connectToDatabase } from '../strategies/ethquake/database/mongodb.js'
+import { getDb } from '../lib/mongodb.js'
 
 const router = express.Router()
 
@@ -10,7 +10,7 @@ router.get('/hourly', async (req, res): Promise<void> => {
     if (typeof req.query.db === 'string') {
       dbName = req.query.db
     }
-    const db = await connectToDatabase(dbName)
+    const db = await getDb(dbName)
     
     // Get data from MongoDB
     const transactions = await db.collection('transactions_per_hour')

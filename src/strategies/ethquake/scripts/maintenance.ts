@@ -1,5 +1,5 @@
 import dotenv from 'dotenv'
-import { connectToDatabase } from '../database/mongodb.js'
+import { getDb } from '../../../lib/mongodb.js'
 import { fetchTransactions } from '../../../lib/getTWTransactions.js'
 import readline from 'readline'
 
@@ -46,7 +46,7 @@ async function promptForDatabase() {
 async function getDatabase(dbType: 'A' | 'B') {
   const dbName = dbType === 'B' ? 'ethquake_b' : 'ethquake'
   console.log(`Connecting to database: ${dbName}`)
-  const db = await connectToDatabase(dbName)
+  const db = await getDb(dbName)
   console.log(`Successfully connected to database: ${dbName}`)
   
   // Verify we're connected to the correct database

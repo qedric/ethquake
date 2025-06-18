@@ -1,7 +1,7 @@
 import { updateTransactionsByAddressesOfInterest } from './scripts/updateTransactionsByAddress.js'
 import { countTransactionsByHour } from './scripts/txCountByHour.js'
 import { executeTradeStrategy } from './strategy.js'
-import { connectToDatabase } from './database/mongodb.js'
+import { getDb } from '../../lib/mongodb.js'
 import { selectDatabase } from './database/dbSelector.js'
 
 let isInitialized = false
@@ -22,8 +22,8 @@ async function initialize() {
       // Select database in development mode
       const dbName = await selectDatabase()
       
-      // Connect to MongoDB
-      await connectToDatabase(typeof dbName === 'string' ? dbName : undefined)
+      // Connect to MongoDB - getDb handles the connection internally
+      await getDb(typeof dbName === 'string' ? dbName : 'ethquake')
       
       isInitialized = true
     } catch (error) {
