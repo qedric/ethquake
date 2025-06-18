@@ -3,7 +3,78 @@ description:
 globs: 
 alwaysApply: true
 ---
-# overview: ETHQuake forewarns of impending large price movements in ETHUSD.
+# Overview: Multi-Strategy Trading Platform
+
+This server hosts and manages multiple independent trading strategies, each with its own codebase and database. Strategies can be enabled, disabled, and controlled independently. Shared resources such as the exchange API (for opening/closing trades) and technical analysis indicators are available to all strategies.
+
+## Strategy Architecture
+
+Each strategy:
+- Lives in its own directory under `src/strategies/`
+- Must have a `strategy.json` configuration file with the following schema:
+  ```json
+  {
+    "name": "strategy_name",
+    "enabled": true|false,
+    "description": "Strategy description",
+    "cronSchedule": "cron_schedule_expression"
+  }
+  ```
+- Must have a `run.ts` (or `run.js` in production) file that exports a `runPipelineTask()` function
+- Has its own isolated database (for data, signals, logs, etc.)
+- Can use shared modules from `src/trading/`, `src/alerts/`, etc.
+- Is responsible for its own data ingestion, signal generation, and trade execution logic
+
+## Server Implementation
+
+The server:
+- Automatically discovers and loads strategies from the `strategies/` directory
+- Validates each strategy's configuration and entry point
+- Initializes each enabled strategy by running its pipeline once
+- Sets up cron jobs based on each strategy's schedule
+- Provides HTTP endpoints for:
+  - `/status`: View status of all loaded strategies
+  - `/run-pipeline/:strategy`: Manually trigger a strategy's pipeline
+- Handles authentication and error recovery
+
+## Current Strategies
+
+### ETHQuake
+- Location: `src/strategies/ethquake/`
+- Purpose: Forewarns of impending large price movements in ETHUSD by monitoring blockchain activity
+- Schedule: Runs every 15 minutes
+- Components:
+  - Data Collection: Monitors transactions from addresses of interest
+  - Signal Generation: Analyzes transaction patterns
+  - Trade Execution: Uses EMAs to determine trade direction
+  - Maintenance: CLI tools for updating addresses of interest
+
+### EMAs
+- Location: `src/strategies/emas/`
+- Purpose: Trades based on EMA crossovers
+- Schedule: Runs hourly
+
+## Adding New Strategies
+
+To add a new strategy:
+1. Create a new directory under `src/strategies/`
+2. Add `strategy.json` with required configuration
+3. Implement `run.ts` with the `runPipelineTask()` function
+4. Strategy will be automatically loaded on next server start
+
+## Shared Infrastructure
+
+Common functionality available to all strategies:
+- Trading: Order placement and position management via Kraken API
+- Technical Analysis: EMA calculations and other indicators
+- Alerts: Notification system for important events
+- Database: MongoDB connections (each strategy should use its own database)
+
+
+
+# ETHQuake Strategy overview:
+
+ETHQuake forewarns of impending large price movements in ETHUSD.
 
 ETHQuake works by monitoring transactions which involve addresses of interest, that tend to increase activity before large market movements (see Maintenance CLI section for information on maintaining this list of addresses of interest). Our server periodically queries the blockchain to see how many addresses of interest made transactions having a value greater or equal to a given amount (default 100 ETH). We keep track of the number of these transactions per hour (queried every 15 min by default).
 
