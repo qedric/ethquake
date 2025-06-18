@@ -3,6 +3,7 @@ import { getDb } from '../../../lib/mongodb.js'
 import { getBlockNumberFromTimestamp } from '../../../lib/getBlockNumberFromTimestamp.js'
 import { fetchTransactions } from '../../../lib/getTWTransactions.js'
 import { MongoClient } from 'mongodb'
+import { selectDatabase } from '../database/dbSelector.js'
 
 /**
  * Updates transactions for addresses of interest by fetching new ones since the latest block in the existing data.
@@ -42,9 +43,6 @@ dotenv.config()
 const DEFAULT_MIN_ETH = 100
 const WEI_TO_ETH = 1e18
 
-// Constants
-const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
-
 /**
  * Updates transactions for addresses of interest by fetching new ones since the specified block
  * 
@@ -68,10 +66,19 @@ async function updateTransactionsByAddressesOfInterest({
   existingClient?: MongoClient | null
 } = {}) {
   // Get MongoDB connection
-  const db = existingDb || await getDb(DB_NAME)
-  console.log(`Using database: ${db.databaseName}`)
-  const client = existingClient
+  let db
+  let client = existingClient
   const shouldCloseConnection = !existingDb
+
+  if (existingDb) {
+    db = existingDb
+  } else {
+    const dbName = await selectDatabase()
+    db = await getDb(dbName)
+    client = (db as any).client
+  }
+
+  console.log(`Using database: ${db.databaseName}`)
 
   try {
     console.log('fromTimestamp:', fromTimestamp)
@@ -233,7 +240,7 @@ async function updateTransactionsByAddressesOfInterest({
     // Only save the new unique transactions to save time
     if (newUniqueCount > 0) {
       const newUniqueTxs = newTransactions.filter((tx: any) => !existingTransactions.some((e: any) => e.hash === tx.hash))
-      await saveTransactionsToMongo(newUniqueTxs)
+      await saveTransactionsToMongo(newUniqueTxs, db)
     } else {
       console.log('No new transactions to save.')
     }
@@ -251,9 +258,8 @@ async function updateTransactionsByAddressesOfInterest({
   }
 }
 
-async function saveTransactionsToMongo(transactions: any[], collectionName = 'transactions') {
+async function saveTransactionsToMongo(transactions: any[], db: any, collectionName = 'transactions') {
   try {
-    const db = await getDb(DB_NAME)
     const collection = db.collection(collectionName)
     
     // Create a bulk operation

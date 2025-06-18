@@ -11,7 +11,7 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
   console.log('Starting transaction analysis from MongoDB...')
   
   // Use existing connection or create new one
-  const db = existingDb || await getDb('ethquake')
+  const db = existingDb || await getDb(process.env.MONGO_DB_NAME || 'ethquake')
   let client = existingClient || (db as any).client // For closing connection later
   const shouldCloseConnection = !existingDb // Only close if we created a new connection
   
@@ -164,15 +164,6 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
   }
 }
 
-// Format date and hour for display (DD/MM/YY - HH)
-function formatDateHour(date: any) {
-  const day = date.getUTCDate().toString().padStart(2, '0')
-  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
-  const year = date.getUTCFullYear().toString().substring(2)
-  const hour = date.getUTCHours().toString().padStart(2, '0')
-  return `${day}/${month}/${year} - ${hour}`
-}
-
 // Get list of addresses of interest from MongoDB
 async function getAddressesOfInterest(db: any) {
   const addresses = await db.collection('addresses_of_interest')
@@ -181,6 +172,16 @@ async function getAddressesOfInterest(db: any) {
     .toArray()
   
   return addresses.map((a: any) => a.address)
+}
+
+// Format date and hour for display
+function formatDateHour(date: Date): string {
+  const day = date.getUTCDate().toString().padStart(2, '0')
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
+  const year = date.getUTCFullYear().toString().substring(2)
+  const hour = date.getUTCHours().toString().padStart(2, '0')
+  
+  return `${day}/${month}/${year} - ${hour}`
 }
 
 // Migrate data from old collection to new one

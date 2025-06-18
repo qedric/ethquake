@@ -2,7 +2,7 @@
  * Prompts the user to select a database instance in development mode
  * @returns {Promise<string>} The selected database name
  */
-async function selectDatabase() {
+async function selectDatabase(): Promise<string> {
   if (process.env.NODE_ENV === 'production') {
     return 'ethquake' // Always use A in production
   }

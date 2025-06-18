@@ -6,6 +6,7 @@ import { selectDatabase } from './database/dbSelector.js'
 
 let isInitialized = false
 let initializationPromise: Promise<void> | null = null
+let selectedDbName: string | null = null
 
 async function initialize() {
   if (isInitialized) return
@@ -20,10 +21,10 @@ async function initialize() {
   initializationPromise = (async () => {
     try {
       // Select database in development mode
-      const dbName = await selectDatabase()
+      selectedDbName = await selectDatabase()
       
       // Connect to MongoDB - getDb handles the connection internally
-      await getDb(typeof dbName === 'string' ? dbName : 'ethquake')
+      await getDb(selectedDbName as string)
       
       isInitialized = true
     } catch (error) {
@@ -43,11 +44,16 @@ export async function runPipelineTask() {
   }
 
   try {
+    // Get a database connection
+    const db = await getDb(selectedDbName as string)
+
     // Update transactions data
-    const txResult = await updateTransactionsByAddressesOfInterest()
+    const txResult = await updateTransactionsByAddressesOfInterest({
+      existingDb: db
+    })
 
     // Run analysis
-    const analysisResults = await countTransactionsByHour()
+    const analysisResults = await countTransactionsByHour(db)
 
     // Only execute trading strategy in production
     if (process.env.NODE_ENV === 'production') {
