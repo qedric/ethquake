@@ -73,6 +73,11 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
     const secondsNeeded = hoursNeeded * 3600
     const since = now - secondsNeeded
     
+    /* console.log(`Fetching OHLC data for ${pair}:`)
+    console.log(`- Interval: ${interval} minutes`)
+    console.log(`- Hours needed: ${hoursNeeded}`)
+    console.log(`- Since timestamp: ${since} (${new Date(since * 1000).toISOString()})`) */
+    
     const response = await axios.get(
       `https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${interval}&since=${since}`
     )
@@ -90,6 +95,10 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
       throw new Error('Unexpected response format from Kraken API')
     }
     
+    console.log(`Received ${pairData.length} candles from Kraken API`)
+    console.log(`First candle time: ${new Date(pairData[0][0] * 1000).toISOString()}`)
+    console.log(`Last candle time: ${new Date(pairData[pairData.length - 1][0] * 1000).toISOString()}`)
+    
     // Kraken returns data in format [time, open, high, low, close, vwap, volume, count]
     // Extract just the closing prices (index 4)
     return pairData.map((candle: any) => parseFloat(candle[4]))
@@ -99,38 +108,60 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
   }
 }
 
-/**
- * Fetches technical indicators from Kraken API and calculates EMAs
- */
-export async function getTechnicalIndicators() {
+export type CandleData = {
+  price: number
+  timestamp: Date
+  [key: `ema${number}`]: number
+}
+
+//Fetches technical indicators from Kraken API and calculates EMAs
+export async function getEMAs(
+  pair: string = 'ETHUSD', 
+  interval: number = 15,
+  emaPeriods: number[] = [20, 50, 100],
+  lookbackCandles: number = 1 // Default to just current candle
+): Promise<CandleData[]> {
   try {
-    // For 100 EMA on 15min timeframe, we want at least 3x that amount of data points for accuracy
-    // 100 periods * 15min = 1500min = 25 hours, so we'll get 75 hours of data
-    const prices = await getKrakenOHLCData('ETHUSD', 15, 75)
+    // Find the longest EMA period to determine data needs
+    const maxPeriod = Math.max(...emaPeriods)
     
-    if (!prices || prices.length === 0) {
-      throw new Error('Failed to fetch price data from Kraken')
+    // For max EMA period, we want at least 3x that amount of data points for accuracy
+    // Add lookbackCandles to ensure we have enough data for historical calculations
+    const minDataPoints = maxPeriod * 3
+    const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
+    const prices = await getKrakenOHLCData(pair, interval, hoursNeeded)
+    
+    if (!prices || prices.length < lookbackCandles + 1) {
+      throw new Error(`Failed to fetch enough price data. Need at least ${lookbackCandles + 1} candles`)
     }
-    
-    if (prices.length < 300) {
-      throw new Error(`Not enough price data for reliable EMA calculations: got ${prices.length}, need at least 300`)
+
+    // Need enough data for the longest period plus warmup for ALL lookback candles
+    if (prices.length < minDataPoints + lookbackCandles) {
+      throw new Error(`Not enough price data for reliable EMA calculations: got ${prices.length}, need at least ${minDataPoints + lookbackCandles}`)
     }
+
+    // We'll return this many recent candles (including current)
+    const recentPrices = prices.slice(-lookbackCandles)
     
-    // Current price is the last price in the array
-    const currentPrice = prices[prices.length - 1]
-    
-    // Calculate EMAs
-    const ema20 = calculateEMA(prices, 20)
-    const ema50 = calculateEMA(prices, 50)
-    const ema100 = calculateEMA(prices, 100)
-    
-    return {
-      price: currentPrice,
-      ema20,
-      ema50,
-      ema100,
-      timestamp: new Date()
-    }
+    // Calculate EMAs for each historical point
+    return recentPrices.map((price, idx) => {
+      // For each point, we need all previous data for EMA calculation
+      // We ensure we have minDataPoints worth of data before each point
+      const dataEndIndex = prices.length - lookbackCandles + idx + 1
+      const dataStartIndex = Math.max(0, dataEndIndex - minDataPoints)
+      const pricesUpToThis = prices.slice(dataStartIndex, dataEndIndex)
+      
+      const emas = emaPeriods.reduce((acc, period) => {
+        acc[`ema${period}`] = calculateEMA(pricesUpToThis, period)
+        return acc
+      }, {} as Record<string, number>)
+
+      return {
+        price,
+        ...emas,
+        timestamp: new Date(Date.now() - (lookbackCandles - 1 - idx) * interval * 60 * 1000)
+      }
+    })
   } catch (error) {
     console.error('Error fetching indicators:', error)
     throw error
