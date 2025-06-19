@@ -130,7 +130,7 @@ async function runTests() {
   console.log('\n=== Test Summary ===')
   console.log(`Passed: ${passed}`)
   console.log(`Failed: ${failed}`)
-  console.log(`Total: ${tests.length}`)
+  console.log(`Total: ${tests.length} `)
   
   if (failed > 0) process.exit(1)
   process.exit(0)
