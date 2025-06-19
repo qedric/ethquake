@@ -80,7 +80,7 @@ type StopConfig = NoStopConfig | TrailingStopConfig | FixedStopConfig
  */
 export async function getCurrentPrice(symbol: string): Promise<number> {
   try {
-    const response = await axios.get(`https://futures.kraken.com/derivatives/api/v3/tickers`)
+    const response = await axios.get('https://futures.kraken.com/derivatives/api/v3/tickers')
     const ticker = response.data.tickers.find((t: any) => t.symbol === symbol)
     if (!ticker) {
       throw new Error(`No ticker found for symbol ${symbol}`)

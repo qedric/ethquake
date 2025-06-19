@@ -46,6 +46,7 @@ const tests: TestCase[] = [
       
       // Get current price for stop calculation
       const price = await getCurrentPrice(SYMBOL)
+      console.log('Current price:', price)
       
       // Place a buy order with trailing stop
       const buyResult = await placeOrder('buy', TEST_SIZE, {

@@ -92,7 +92,7 @@ async function runTests() {
     }
   }
   
-  console.log(`\n=== Test Summary ===`)
+  console.log('\n=== Test Summary ===')
   console.log(`Passed: ${passed}`)
   console.log(`Failed: ${failed}`)
   console.log(`Total: ${tests.length}`)

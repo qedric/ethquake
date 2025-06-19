@@ -5,6 +5,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "verify-build": "test -d dist/strategies && test -f dist/strategies/ethquake/strategy.json || (echo 'Build verification failed' && exit 1)",
+    "prebuild": "npm run lint",
     "build": "npm run clean && tsc && cp -r src/public dist/ && mkdir -p dist/strategies && for d in src/strategies/*/; do if [ -f \"$d/strategy.json\" ]; then mkdir -p \"dist/${d#src/}\" && cp \"$d/strategy.json\" \"dist/${d#src/}\"; fi; done && npm run verify-build",
     "start": "node dist/server/index.js",
     "dev": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' --require tsconfig-paths/register src/server/index.ts",
