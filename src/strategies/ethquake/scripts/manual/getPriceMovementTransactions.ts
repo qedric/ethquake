@@ -28,7 +28,7 @@ const OUTPUT_DIR = path.join(__dirname, '../data')
 const DEFAULT_MIN_ETH_VALUE = '100000000000000000000'
 
 if (!TW_CLIENT_ID) {
-  console.error('Missing TW_CLIENT_ID in environment variables')
+  console.error('[Strategy: ethquake] Missing TW_CLIENT_ID in environment variables')
   process.exit(1)
 }
 
@@ -39,11 +39,11 @@ async function readTimestamps(filePath: string) {
       ? filePath 
       : path.join(OUTPUT_DIR, filePath)
     
-    console.log(`Reading timestamps from: ${fullPath}`)
+    console.log(`[Strategy: ethquake] Reading timestamps from: ${fullPath}`)
     const data = fs.readFileSync(fullPath, 'utf8')
     return JSON.parse(data)
   } catch (error) {
-    console.error(`Error reading timestamps file ${filePath}:`, error)
+    console.error(`[Strategy: ethquake] Error reading timestamps file ${filePath}:`, error)
     throw error
   }
 }
@@ -216,28 +216,28 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const lookbackHours = process.argv[4] ? parseInt(process.argv[4]) : 1
   
   if (!mode || !timestampFilePath) {
-    console.error('Please provide mode (target/control) and path to the timestamp JSON file')
-    console.error('Example: node src/getTransactions.js target percentage_price_movements_timestamps/6.json [lookbackHours]')
-    console.error('Example: node src/getTransactions.js control percentage_price_movements_timestamps/6.json [lookbackHours]')
+    console.error('[Strategy: ethquake] Please provide mode (target/control) and path to the timestamp JSON file')
+    console.error('[Strategy: ethquake] Example: node src/getTransactions.js target percentage_price_movements_timestamps/6.json [lookbackHours]')
+    console.error('[Strategy: ethquake] Example: node src/getTransactions.js control percentage_price_movements_timestamps/6.json [lookbackHours]')
     process.exit(1)
   }
   
   if (mode === 'target') {
     getTransactionsBeforePriceMovements(timestampFilePath, lookbackHours)
-      .then(() => console.log('Done!'))
+      .then(() => console.log('[Strategy: ethquake] Done!'))
       .catch(err => {
-        console.error('Failed to get target transactions:', err)
+        console.error('[Strategy: ethquake] Failed to get target transactions:', err)
         process.exit(1)
       })
   } else if (mode === 'control') {
     getControlGroupTransactions(timestampFilePath, lookbackHours)
-      .then(() => console.log('Done!'))
+      .then(() => console.log('[Strategy: ethquake] Done!'))
       .catch(err => {
-        console.error('Failed to get control transactions:', err)
+        console.error('[Strategy: ethquake] Failed to get control transactions:', err)
         process.exit(1)
       })
   } else {
-    console.error('Invalid mode. Use "target" or "control"')
+    console.error('[Strategy: ethquake] Invalid mode. Use "target" or "control"')
     process.exit(1)
   }
 }

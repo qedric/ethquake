@@ -4,15 +4,15 @@
  */
 async function selectDatabase(): Promise<string> {
   if (process.env.NODE_ENV === 'production') {
-    console.log('[DB Selection] Production mode - using ethquake database')
+    console.log('[Strategy: ethquake] Production mode - using ethquake database')
     return 'ethquake' // Always use A in production
   }
 
   return new Promise((resolve) => {
-    console.log('\n[DB Selection] Development Mode: Select Database Instance')
-    console.log('[DB Selection] 1. ethquake (A) - Production database')
-    console.log('[DB Selection] 2. ethquake_b (B) - Testing database')
-    console.log('[DB Selection] Select database (1 or 2): ')
+    console.log('\n[Strategy: ethquake] Development Mode: Select Database Instance')
+    console.log('[Strategy: ethquake] 1. ethquake (A) - Production database')
+    console.log('[Strategy: ethquake] 2. ethquake_b (B) - Testing database')
+    console.log('[Strategy: ethquake] Select database (1 or 2): ')
 
     // Use raw mode to get single character input
     process.stdin.setRawMode(true)
@@ -30,7 +30,7 @@ async function selectDatabase(): Promise<string> {
         process.stdin.removeListener('data', onData)
 
         const dbName = key === '2' ? 'ethquake_b' : 'ethquake'
-        console.log(`[DB Selection] Selected database: ${dbName}`)
+        console.log(`[Strategy: ethquake] Selected database: ${dbName}`)
         resolve(dbName)
       } else if (key === '\u0003') { // Ctrl+C
         process.exit()

@@ -81,18 +81,18 @@ async function updateTransactionsByAddressesOfInterest({
   console.log(`Using database: ${db.databaseName}`)
 
   try {
-    console.log('fromTimestamp:', fromTimestamp)
-    console.log('toTimestamp:', toTimestamp)
+    console.log('[Strategy: ethquake] fromTimestamp:', fromTimestamp)
+    console.log('[Strategy: ethquake] toTimestamp:', toTimestamp)
     
     // Load existing transaction data from MongoDB
-    console.log('Reading existing transaction data from MongoDB...')
+    console.log('[Strategy: ethquake] Reading existing transaction data from MongoDB...')
     let existingTransactions: any[] = []
     
     try {
       existingTransactions = await db.collection('transactions').find({}).toArray()
-      console.log(`Found ${existingTransactions.length} existing transactions.`)
+      console.log(`[Strategy: ethquake] Found ${existingTransactions.length} existing transactions.`)
     } catch (error) {
-      console.error('Error fetching transactions from MongoDB:', error)
+      console.error('[Strategy: ethquake] Error fetching transactions from MongoDB:', error)
       throw new Error(`Failed to read existing transactions: ${error instanceof Error ? error.message : String(error)}`)
     }
 
@@ -102,20 +102,20 @@ async function updateTransactionsByAddressesOfInterest({
     
     if (fromTimestamp) {
       startBlockNumber = await getBlockNumberFromTimestamp(fromTimestamp)
-      console.log(`Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`)
+      console.log(`[Strategy: ethquake] Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`)
     } else if (existingTransactions.length > 0) {
       // Find the highest block_number from existing transactions
       startBlockNumber = Math.max(...existingTransactions.map((tx: any) => parseInt((tx as any).block_number)))
-      console.log(`Latest block number in existing data: ${startBlockNumber}`)
+      console.log(`[Strategy: ethquake] Latest block number in existing data: ${startBlockNumber}`)
     } else {
       // If there are no transactions yet and no start timestamp was provided, we need to abort
-      console.log('No existing transactions found in MongoDB and no start timestamp provided.')
+      console.log('[Strategy: ethquake] No existing transactions found in MongoDB and no start timestamp provided.')
       throw new Error('Cannot determine start block. Please provide a start timestamp.')
     }
 
     if (toTimestamp) {
       endBlockNumber = await getBlockNumberFromTimestamp(toTimestamp)
-      console.log(`Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`)
+      console.log(`[Strategy: ethquake] Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`)
     }
 
     // Load addresses of interest from MongoDB
@@ -124,9 +124,9 @@ async function updateTransactionsByAddressesOfInterest({
     try {
       addressesOfInterest = await db.collection('addresses_of_interest').find({}).toArray()
       addressesOfInterest = addressesOfInterest.map(item => (item as any).address)
-      console.log(`Loaded ${addressesOfInterest.length} addresses of interest.`)
+      console.log(`[Strategy: ethquake] Loaded ${addressesOfInterest.length} addresses of interest.`)
     } catch (error) {
-      console.error('Error fetching addresses of interest from MongoDB:', error)
+      console.error('[Strategy: ethquake] Error fetching addresses of interest from MongoDB:', error)
       throw new Error(`Failed to load addresses of interest: ${error instanceof Error ? error.message : String(error)}`)
     }
 
@@ -136,7 +136,7 @@ async function updateTransactionsByAddressesOfInterest({
 
     // Fetch new transactions for all addresses
     const endBlockDisplay = endBlockNumber === null ? 'latest' : endBlockNumber
-    console.log(`Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`)
+    console.log(`[Strategy: ethquake] Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`)
     
     const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH)
     let newTransactions: any[] = []
@@ -147,7 +147,7 @@ async function updateTransactionsByAddressesOfInterest({
     
     // Clear line and write initial status
     process.stdout.write('\r\x1b[K') // Clear the current line
-    process.stdout.write(`Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `)
+    process.stdout.write(`[Strategy: ethquake] Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `)
     
     for (let i = 0; i < addressesOfInterest.length; i += chunkSize) {
       const addressesChunk = addressesOfInterest.slice(i, i + chunkSize)
@@ -206,7 +206,7 @@ async function updateTransactionsByAddressesOfInterest({
       
       // Update the status line with current progress
       process.stdout.write('\r\x1b[K') // Clear the current line
-      process.stdout.write(`Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `)
+      process.stdout.write(`[Strategy: ethquake] Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `)
       
       // Wait 1 second before processing the next chunk to avoid rate limiting
       if (i + chunkSize < addressesOfInterest.length) {

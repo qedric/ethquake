@@ -37,7 +37,7 @@ export async function executeTradeStrategy() {
         db = await getDb(DB_NAME)
         break // If we get here, connection succeeded
       } catch (error) {
-        console.log(`Database connection attempt ${connectionAttempts} failed - ${error instanceof Error ? error.message : String(error)}`)
+        console.log(`[Strategy: ethquake] Database connection attempt ${connectionAttempts} failed - ${error instanceof Error ? error.message : String(error)}`)
         if (connectionAttempts === MAX_CONNECTION_ATTEMPTS) {
           throw new Error('Max connection attempts reached')
         }
@@ -60,10 +60,10 @@ export async function executeTradeStrategy() {
     // Sort back into ascending order for our logic
     recentResults.sort((a: any, b: any) => a.timestamp - b.timestamp)
 
-    console.log('recent results:', recentResults)
+    console.log('[Strategy: ethquake] recent results:', recentResults)
     
     if (recentResults.length < 2) {
-      console.log('Not enough analysis data to make trading decisions')
+      console.log('[Strategy: ethquake] Not enough analysis data to make trading decisions')
       return
     }
     
@@ -72,7 +72,7 @@ export async function executeTradeStrategy() {
     const fifteenMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
 
     if (mostRecentRecord.updated_at < fifteenMinutesAgo) {
-      console.log('Most recent record is too old:', mostRecentRecord.updated_at)
+      console.log('[Strategy: ethquake] Most recent record is too old:', mostRecentRecord.updated_at)
       return
     }
     
@@ -103,10 +103,10 @@ export async function executeTradeStrategy() {
     type Direction = 'buy' | 'sell' | 'none'
     let direction: Direction = 'none'
 
-    console.log('current price:', price)
-    console.log('ema20:', ema20)
-    console.log('ema50:', ema50)
-    console.log('ema100:', ema100)
+    console.log('[Strategy: ethquake] current price:', price)
+    console.log('[Strategy: ethquake] ema20:', ema20)
+    console.log('[Strategy: ethquake] ema50:', ema50)
+    console.log('[Strategy: ethquake] ema100:', ema100)
     
     // New direction logic using price and three EMAs
     if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
@@ -117,12 +117,12 @@ export async function executeTradeStrategy() {
 
     // Check for threshold breach and alert regardless other conditions
     if (recentResults[recentResults.length-1].count >= ALERT_THRESHOLD) {
-      console.log(`Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
+      console.log(`[Strategy: ethquake] Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
       sendAlert(`Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
     }
     
     if (direction === 'none') {
-      console.log('No clear direction from technical indicators, not trading')
+      console.log('[Strategy: ethquake] No clear direction from technical indicators, not trading')
       sendAlert('Signal detected - no clear direction - not trading.')
       return
     }
@@ -137,7 +137,7 @@ export async function executeTradeStrategy() {
     
 
     if (recentTrades.length > 0) {
-      console.log(`Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
+      console.log(`[Strategy: ethquake] Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
       sendAlert(`Signal detected - within cooldown period - would have taken ${direction} position`)
       return
     }
@@ -145,7 +145,7 @@ export async function executeTradeStrategy() {
     // Place order
     let orderResult = null
     if (direction === 'buy' || direction === 'sell') {
-      console.log(`Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
+      console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
       orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, TRADING_PAIR)
     }
 
@@ -172,7 +172,7 @@ export async function executeTradeStrategy() {
     }
     
   } catch (error) {
-    console.error('Error executing trading strategy:', error)
+    console.error('[Strategy: ethquake] Error executing trading strategy:', error)
     throw error
   }
 } 

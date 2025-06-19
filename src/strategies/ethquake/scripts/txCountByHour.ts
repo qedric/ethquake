@@ -8,7 +8,7 @@ dotenv.config()
  * Outputs hourly transaction counts for addresses of interest
  */
 async function countTransactionsByHour(existingDb: any = null, existingClient: any = null) {
-  console.log('Starting transaction analysis from MongoDB...')
+  console.log('[Strategy: ethquake] Starting transaction analysis from MongoDB...')
   
   // Use existing connection or create new one
   const db = existingDb || await getDb(process.env.MONGO_DB_NAME || 'ethquake')
@@ -17,7 +17,7 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
   
   try {
     // Count of transactions by hour
-    console.log('Aggregating transactions by hour...')
+    console.log('[Strategy: ethquake] Aggregating transactions by hour...')
     
     const pipeline = [
       // Match transactions that involve addresses of interest
@@ -49,7 +49,7 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
     const results = await db.collection('transactions').aggregate(pipeline).toArray()
     
     if (results.length === 0) {
-      console.log('No transactions found.')
+      console.log('[Strategy: ethquake] No transactions found.')
       return
     }
     
@@ -66,13 +66,13 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
       return `${day}/${month}/${year} - ${hour},${r.count}`
     })
     
-    console.log('Analysis complete.')
-    console.log('\nHourly transaction counts (last 24 hrs):')
+    console.log('[Strategy: ethquake] Analysis complete.')
+    console.log('\n[Strategy: ethquake] Hourly transaction counts (last 24 hrs):')
     
     // Get the last 24 entries chronologically
     const last24HrsOutput = output.slice(-24).join('\n')
     
-    console.log(last24HrsOutput || 'No transactions in the last 24 hours')
+    console.log(last24HrsOutput || '[Strategy: ethquake] No transactions in the last 24 hours')
     
     // Prepare data for storing in MongoDB with proper date handling
     const analysisResults = results.map((r: any) => {
@@ -130,36 +130,36 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
     })
     
     // Add debug logging
-    console.log(`Found ${existingEntries.length} existing entries in MongoDB`)
-    console.log(`Found ${analysisResults.length} total results from current analysis`)
-    console.log(`After filtering: ${newResults.length} new entries, ${updatesToMake.length} updates needed`)
+    console.log(`[Strategy: ethquake] Found ${existingEntries.length} existing entries in MongoDB`)
+    console.log(`[Strategy: ethquake] Found ${analysisResults.length} total results from current analysis`)
+    console.log(`[Strategy: ethquake] After filtering: ${newResults.length} new entries, ${updatesToMake.length} updates needed`)
     
     // Process new entries
     if (newResults.length > 0) {
       await db.collection('transactions_per_hour').insertMany(newResults)
-      console.log(`Saved ${newResults.length} new analysis results to MongoDB`)
+      console.log(`[Strategy: ethquake] Saved ${newResults.length} new analysis results to MongoDB`)
     }
     
     // Process updates
     if (updatesToMake.length > 0) {
       const updateResult = await db.collection('transactions_per_hour').bulkWrite(updatesToMake)
-      console.log(`Updated ${updateResult.modifiedCount} existing entries in MongoDB`)
+      console.log(`[Strategy: ethquake] Updated ${updateResult.modifiedCount} existing entries in MongoDB`)
     }
     
     if (newResults.length === 0 && updatesToMake.length === 0) {
-      console.log('No changes needed to analysis results')
+      console.log('[Strategy: ethquake] No changes needed to analysis results')
     }
     
     return analysisResults
   } catch (error) {
-    console.error('Analysis failed:', error)
+    console.error('[Strategy: ethquake] Analysis failed:', error)
     throw error
   } finally {
     // Close MongoDB connection so the process can exit, but only if we created it
     if (shouldCloseConnection && client) {
-      console.log('Closing MongoDB connection...')
+      console.log('[Strategy: ethquake] Closing MongoDB connection...')
       await client.close()
-      console.log('MongoDB connection closed')
+      console.log('[Strategy: ethquake] MongoDB connection closed')
     }
   }
 }

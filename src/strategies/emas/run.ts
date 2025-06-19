@@ -60,13 +60,13 @@ async function loadState(): Promise<void> {
       if (currentPosition) {
         const hasPosition = await hasOpenPosition(TRADING_PAIR)
         if (!hasPosition) {
-          console.log('Stored position state does not match exchange - resetting state')
+          console.log('[Strategy: emas] Stored position state does not match exchange - resetting state')
           resetState()
         }
       }
     }
   } catch (error) {
-    console.error('Error loading strategy state:', error)
+    console.error('[Strategy: emas] Error loading strategy state:', error)
     // Continue with default state
   }
 }
@@ -90,7 +90,7 @@ async function saveState(): Promise<void> {
     
     await db.collection('strategy_state').replaceOne({}, state, { upsert: true })
   } catch (error) {
-    console.error('Error saving strategy state:', error)
+    console.error('[Strategy: emas] Error saving strategy state:', error)
   }
 }
 
@@ -296,7 +296,7 @@ export async function runPipelineTask() {
 
       // If we hit the freeze level, safely replace trailing stop with fixed stop
       if (!stopFrozen && maxPrice >= freezeLevel && currentStopOrderId) {
-        console.log(`Price ${maxPrice} hit freeze level ${freezeLevel}, freezing stop at ${trailStop}`)
+        console.log(`[Strategy: emas] Price ${maxPrice} hit freeze level ${freezeLevel}, freezing stop at ${trailStop}`)
         
         const replaceResult = await replaceStopOrder(
           currentStopOrderId,
@@ -310,9 +310,9 @@ export async function runPipelineTask() {
           currentStopOrderId = replaceResult.newOrderId
           frozenStop = trailStop
           stopFrozen = true
-          console.log(`Successfully froze stop at ${trailStop}`)
+          console.log(`[Strategy: emas] Successfully froze stop at ${trailStop}`)
         } else {
-          console.error('Failed to freeze stop - keeping trailing stop active')
+          console.error('[Strategy: emas] Failed to freeze stop - keeping trailing stop active')
         }
       }
 
@@ -321,10 +321,10 @@ export async function runPipelineTask() {
         // Verify if we still have a position before sending a market order
         const stillHavePosition = await hasOpenPosition(TRADING_PAIR)
         if (stillHavePosition) {
-          console.log('Stop level breached but position still open - sending market order to close')
+          console.log('[Strategy: emas] Stop level breached but position still open - sending market order to close')
           await placeOrder('sell', POSITION_SIZE, NO_STOP, TRADING_PAIR, true) // Close with market, reduceOnly
         } else {
-          console.log('Stop level breached but position already closed - skipping market order')
+          console.log('[Strategy: emas] Stop level breached but position already closed - skipping market order')
         }
         currentPosition = null
         currentPositionId = null
@@ -344,7 +344,7 @@ export async function runPipelineTask() {
 
       // If we hit the freeze level, safely replace trailing stop with fixed stop
       if (!stopFrozen && maxPrice <= freezeLevel && currentStopOrderId) {
-        console.log(`Price ${maxPrice} hit freeze level ${freezeLevel}, freezing stop at ${trailStop}`)
+        console.log(`[Strategy: emas] Price ${maxPrice} hit freeze level ${freezeLevel}, freezing stop at ${trailStop}`)
         
         const replaceResult = await replaceStopOrder(
           currentStopOrderId,
@@ -358,9 +358,9 @@ export async function runPipelineTask() {
           currentStopOrderId = replaceResult.newOrderId
           frozenStop = trailStop
           stopFrozen = true
-          console.log(`Successfully froze stop at ${trailStop}`)
+          console.log(`[Strategy: emas] Successfully froze stop at ${trailStop}`)
         } else {
-          console.error('Failed to freeze stop - keeping trailing stop active')
+          console.error('[Strategy: emas] Failed to freeze stop - keeping trailing stop active')
         }
       }
 
@@ -369,10 +369,10 @@ export async function runPipelineTask() {
         // Verify if we still have a position before sending a market order
         const stillHavePosition = await hasOpenPosition(TRADING_PAIR)
         if (stillHavePosition) {
-          console.log('Stop level breached but position still open - sending market order to close')
+          console.log('[Strategy: emas] Stop level breached but position still open - sending market order to close')
           await placeOrder('buy', POSITION_SIZE, NO_STOP, TRADING_PAIR, true) // Close with market, reduceOnly
         } else {
-          console.log('Stop level breached but position already closed - skipping market order')
+          console.log('[Strategy: emas] Stop level breached but position already closed - skipping market order')
         }
         currentPosition = null
         currentPositionId = null
@@ -389,7 +389,7 @@ export async function runPipelineTask() {
     await saveState()
 
   } catch (error) {
-    console.error('Error in EMA strategy:', error)
+    console.error('[Strategy: emas] Error in EMA strategy:', error)
     throw error
   }
 }

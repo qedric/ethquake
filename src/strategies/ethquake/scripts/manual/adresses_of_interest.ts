@@ -44,7 +44,7 @@ const identifyAddressesOfInterest = (
   const controlTransactions = loadTransactionData(path.resolve(controlFilePath))
   
   if (!targetTransactions.data || !controlTransactions.data) {
-    console.error('Missing transaction data. Make sure your data files exist.')
+    console.error('[Strategy: ethquake] Missing transaction data. Make sure your data files exist.')
     return []
   }
   
@@ -53,19 +53,19 @@ const identifyAddressesOfInterest = (
   const controlAddresses = extractAddresses(controlTransactions.data)
   const controlSet = new Set(controlAddresses)
   
-  console.log(`Found ${targetAddresses.length} unique addresses in target transactions`)
-  console.log(`Found ${controlAddresses.length} unique addresses in control transactions`)
+  console.log(`[Strategy: ethquake] Found ${targetAddresses.length} unique addresses in target transactions`)
+  console.log(`[Strategy: ethquake] Found ${controlAddresses.length} unique addresses in control transactions`)
   
   // Find addresses of interest
   const addressesOfInterest = targetAddresses.filter(addr => !controlSet.has(addr))
   
-  console.log(`Found ${addressesOfInterest.length} addresses of interest`)
+  console.log(`[Strategy: ethquake] Found ${addressesOfInterest.length} addresses of interest`)
   
   // Save addresses of interest to file
   const outputPath = path.resolve(outputFilePath)
   fs.writeFileSync(outputPath, JSON.stringify(addressesOfInterest, null, 2))
   
-  console.log(`Addresses of interest saved to ${outputPath}`)
+  console.log(`[Strategy: ethquake] Addresses of interest saved to ${outputPath}`)
   return addressesOfInterest
 }
 
@@ -78,9 +78,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Just call the function directly since it's not async
   try {
     identifyAddressesOfInterest(targetFilePath, controlFilePath, outputFilePath)
-    console.log('Done!')
+    console.log('[Strategy: ethquake] Done!')
   } catch (err) {
-    console.error('Failed to identify addresses of interest:', err)
+    console.error('[Strategy: ethquake] Failed to identify addresses of interest:', err)
     process.exit(1)
   }
 } else {

@@ -45,13 +45,13 @@ async function promptForDatabase() {
  */
 async function getDatabase(dbType: 'A' | 'B') {
   const dbName = dbType === 'B' ? 'ethquake_b' : 'ethquake'
-  console.log(`Connecting to database: ${dbName}`)
+  console.log(`[Strategy: ethquake] Connecting to database: ${dbName}`)
   const db = await getDb(dbName)
-  console.log(`Successfully connected to database: ${dbName}`)
+  console.log(`[Strategy: ethquake] Successfully connected to database: ${dbName}`)
   
   // Verify we're connected to the correct database
   const dbStats = await db.stats()
-  console.log(`Connected to database: ${dbStats.db}`)
+  console.log(`[Strategy: ethquake] Connected to database: ${dbStats.db}`)
   if (dbStats.db !== dbName) {
     throw new Error(`Connected to wrong database: ${dbStats.db} (expected: ${dbName})`)
   }
@@ -124,11 +124,11 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType: 'A' | 'B'
     .toArray()
 
   if (priceMovements.length === 0) {
-    console.log(`No price movements found in database ${dbType}`)
+    console.log(`[Strategy: ethquake] No price movements found in database ${dbType}`)
     return
   }
 
-  console.log(`Processing ${priceMovements.length} most recent price movements together in database ${dbType}...`)
+  console.log(`[Strategy: ethquake] Processing ${priceMovements.length} most recent price movements together in database ${dbType}...`)
 
   // Convert min ETH to Wei for the API
   const minWeiValue = BigInt(DEFAULT_MIN_ETH) * BigInt(WEI_TO_ETH)
@@ -136,7 +136,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType: 'A' | 'B'
   // Collect all target transactions
   const allTargetTransactions: any[] = []
   for (const movement of priceMovements) {
-    console.log(`\nFetching target transactions for movement at ${new Date(movement.timestamp * 1000).toISOString()}...`)
+    console.log(`\n[Strategy: ethquake] Fetching target transactions for movement at ${new Date(movement.timestamp * 1000).toISOString()}...`)
     
     // Get target transactions (1 hour before movement)
     const targetStart = movement.timestamp - (LOOKBACK_HOURS * 3600)
@@ -148,7 +148,7 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType: 'A' | 'B'
       filter_value_gte: minWeiValue.toString()
     })
     
-    console.log(`Found ${targetTransactions.length} target transactions`)
+    console.log(`[Strategy: ethquake] Found ${targetTransactions.length} target transactions`)
     allTargetTransactions.push(...targetTransactions)
   }
 
@@ -203,17 +203,17 @@ async function getNewAddresses(batchSize = DEFAULT_BATCH_SIZE, dbType: 'A' | 'B'
   const newAddresses = Array.from(targetAddresses).filter(addr => !controlAddresses.has(addr))
   
   if (newAddresses.length === 0) {
-    console.log('No new addresses found across all movements')
+    console.log('[Strategy: ethquake] No new addresses found across all movements')
     // Mark all movements as processed
     await db.collection('price_movements').updateMany(
       { _id: { $in: priceMovements.map(m => m._id) } },
       { $set: { last_processed: new Date() } }
     )
-    console.log('All price movements marked as processed')
+    console.log('[Strategy: ethquake] All price movements marked as processed')
     return
   }
   
-  console.log(`Found ${newAddresses.length} addresses that appear in target but not in control`)
+  console.log(`[Strategy: ethquake] Found ${newAddresses.length} addresses that appear in target but not in control`)
   
   // Count transactions for each new address
   const addressStats = await Promise.all(newAddresses.map(async addr => {
