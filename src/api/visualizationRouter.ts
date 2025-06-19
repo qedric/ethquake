@@ -33,7 +33,7 @@ router.get('/data', async (req, res) => {
     console.log(`[Web Request] Successfully retrieved ${transactions.length} data points from ${dbName}`)
     res.json(transactions)
   } catch (error) {
-    console.error(`[Web Request] Error fetching chart data:`, error)
+    console.error('[Web Request] Error fetching chart data:', error)
     res.status(500).json({ error: 'Failed to fetch chart data' })
   }
 })
