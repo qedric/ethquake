@@ -225,6 +225,23 @@ export async function runPipelineTask() {
         frozenStop = null
         stopFrozen = false
         currentPosition = 'long'
+
+        // Record the trade in trading_signals collection
+        const db = await getDb(DB_NAME)
+        await db.collection('trading_signals').insertOne({
+          created_at: new Date(),
+          direction: 'buy',
+          ema_data: currentCandle,
+          market_order_id: orderResult?.marketOrder?.sendStatus?.order_id || null,
+          market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
+          stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
+          stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
+          result: orderResult?.marketOrder?.result || 'failed',
+          error: orderResult?.error || null,
+          position_id: currentPositionId,
+          entry_price: entryPrice
+        })
+
         await saveState() // Save state after position entry
       }
     }
@@ -250,6 +267,23 @@ export async function runPipelineTask() {
         frozenStop = null
         stopFrozen = false
         currentPosition = 'short'
+
+        // Record the trade in trading_signals collection
+        const db = await getDb(DB_NAME)
+        await db.collection('trading_signals').insertOne({
+          created_at: new Date(),
+          direction: 'sell',
+          ema_data: currentCandle,
+          market_order_id: orderResult?.marketOrder?.sendStatus?.order_id || null,
+          market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
+          stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
+          stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
+          result: orderResult?.marketOrder?.result || 'failed',
+          error: orderResult?.error || null,
+          position_id: currentPositionId,
+          entry_price: entryPrice
+        })
+
         await saveState() // Save state after position entry
       }
     }
