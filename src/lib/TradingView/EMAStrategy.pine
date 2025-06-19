@@ -1,0 +1,119 @@
+//@version=6
+strategy("EMA 20 Crosses All 3 - Flip + Ratcheted Trailing Stop", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+nBars = input.int(24, minval=1, title="Lookback window")
+trailPerc = input.float(3.0, title="Trailing Stop %", minval=0.1)
+freezeTriggerPerc = input.float(2.0, title="Freeze Trigger for ratcheted trailing stop", minval=0.1)
+longOnly = input.bool(false, title="Only long positions")
+
+emaFastLen   = input.int(20, title="Fast EMA (entry)")
+emaMid1Len   = input.int(50, title="Medium EMA 1")
+emaMid2Len   = input.int(100, title="Medium EMA 2")
+emaSlowLen   = input.int(200, title="Slow EMA (trend filter)")
+
+emaFast  = ta.ema(close, emaFastLen)
+emaMid1  = ta.ema(close, emaMid1Len)
+emaMid2  = ta.ema(close, emaMid2Len)
+emaSlow  = ta.ema(close, emaSlowLen)
+
+// Cross detection
+crossover_fast_mid1 = ta.crossover(emaFast, emaMid1)
+crossunder_fast_mid1 = ta.crossunder(emaFast, emaMid1)
+cross_fast_mid1_now = crossover_fast_mid1 or crossunder_fast_mid1
+
+crossover_fast_mid2 = ta.crossover(emaFast, emaMid2)
+crossunder_fast_mid2 = ta.crossunder(emaFast, emaMid2)
+cross_fast_mid2_now = crossover_fast_mid2 or crossunder_fast_mid2
+
+crossover_fast_slow = ta.crossover(emaFast, emaSlow)
+crossunder_fast_slow = ta.crossunder(emaFast, emaSlow)
+cross_fast_slow_now = crossover_fast_slow or crossunder_fast_slow
+
+// History buffers
+var bool[] crossed_fast_mid1_buf = array.new_bool()
+var bool[] crossed_fast_mid2_buf = array.new_bool()
+var bool[] crossed_fast_slow_buf = array.new_bool()
+
+array.unshift(crossed_fast_mid1_buf, cross_fast_mid1_now)
+array.unshift(crossed_fast_mid2_buf, cross_fast_mid2_now)
+array.unshift(crossed_fast_slow_buf, cross_fast_slow_now)
+
+if array.size(crossed_fast_mid1_buf) > nBars
+    array.pop(crossed_fast_mid1_buf)
+if array.size(crossed_fast_mid2_buf) > nBars
+    array.pop(crossed_fast_mid2_buf)
+if array.size(crossed_fast_slow_buf) > nBars
+    array.pop(crossed_fast_slow_buf)
+
+// Check recent crosses
+hasCrossed(buf) =>
+    result = false
+    for i = 0 to array.size(buf) - 1
+        result := result or array.get(buf, i)
+    result
+
+crossed_fast_mid1_recent = hasCrossed(crossed_fast_mid1_buf)
+crossed_fast_mid2_recent = hasCrossed(crossed_fast_mid2_buf)
+crossed_fast_slow_recent = hasCrossed(crossed_fast_slow_buf)
+
+// Final cross logic
+finalCross = (cross_fast_mid1_now and crossed_fast_mid2_recent and crossed_fast_slow_recent) or
+             (cross_fast_mid2_now and crossed_fast_mid1_recent and crossed_fast_slow_recent) or
+             (cross_fast_slow_now and crossed_fast_mid1_recent and crossed_fast_mid2_recent)
+
+isBullish = crossover_fast_mid1 or crossover_fast_mid2 or crossover_fast_slow
+isBearish = crossunder_fast_mid1 or crossunder_fast_mid2 or crossunder_fast_slow
+
+// --- Trailing Stop Variables ---
+var float entryPrice = na
+var float maxPrice = na
+var float frozenStop = na
+var bool stopFrozen = false
+
+// Reset on new entry
+if finalCross and isBullish
+    if strategy.position_size < 0
+        strategy.close("Short")
+    if strategy.position_size <= 0
+        strategy.entry("Long", strategy.long)
+        entryPrice := close
+        maxPrice := close
+        frozenStop := na
+        stopFrozen := false
+
+if finalCross and isBearish
+    if strategy.position_size > 0
+        strategy.close("Long")
+    if strategy.position_size >= 0 and not longOnly
+        strategy.entry("Short", strategy.short)
+        entryPrice := close
+        maxPrice := close
+        frozenStop := na
+        stopFrozen := false
+
+// --- Update trailing stop ---
+if strategy.position_size > 0
+    maxPrice := math.max(maxPrice, close)
+    trailStop = maxPrice - (trailPerc / 100) * entryPrice
+    freezeLevel = entryPrice * (1 + freezeTriggerPerc / 100)
+
+    if not stopFrozen and maxPrice >= freezeLevel
+        frozenStop := trailStop
+        stopFrozen := true
+
+    stopLevel = stopFrozen ? frozenStop : trailStop
+    if close <= stopLevel
+        strategy.close("Long")
+
+if strategy.position_size < 0
+    maxPrice := math.min(maxPrice, close)
+    trailStop = maxPrice + (trailPerc / 100) * entryPrice
+    freezeLevel = entryPrice * (1 - freezeTriggerPerc / 100)
+
+    if not stopFrozen and maxPrice <= freezeLevel
+        frozenStop := trailStop
+        stopFrozen := true
+
+    stopLevel = stopFrozen ? frozenStop : trailStop
+    if close >= stopLevel
+        strategy.close("Short")
