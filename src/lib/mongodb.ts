@@ -21,10 +21,9 @@ let client: MongoClient | null = null
  */
 async function connectToDatabase(dbName: string): Promise<Db> {
   try {
-    console.log(`Connecting to MongoDB database: ${dbName}...`)
-    
     // Reuse existing client if we have one
     if (!client) {
+      console.log(`[MongoDB] Connecting to database: ${dbName}`)
       client = new MongoClient(uri, {
         connectTimeoutMS: 5000,
         socketTimeoutMS: 30000,
@@ -32,14 +31,24 @@ async function connectToDatabase(dbName: string): Promise<Db> {
         retryReads: true
       })
       await client.connect()
-      console.log('Successfully connected to MongoDB')
+      console.log(`[MongoDB] Connected successfully, using database: ${dbName}`)
+    } else {
+      console.log(`[MongoDB] Using existing connection, requesting database: ${dbName}`)
     }
     
     const db = client.db(dbName)
     dbConnections.set(dbName, db)
+    
+    // Verify we're connected to the correct database
+    const stats = await db.stats()
+    console.log(`[MongoDB] Connected to database: ${stats.db}`)
+    if (stats.db !== dbName) {
+      throw new Error(`[MongoDB] Connected to wrong database: ${stats.db} (expected: ${dbName})`)
+    }
+    
     return db
   } catch (error) {
-    console.error('Failed to connect to MongoDB:', error)
+    console.error('[MongoDB] Connection error:', error)
     throw error
   }
 }
