@@ -229,7 +229,7 @@ export async function placeOrder(
   side: 'buy' | 'sell',
   size: number,
   stopConfig: StopConfig = { type: 'none', distance: 0 },
-  symbol: string = 'PF_ETHUSD',
+  symbol: string,
   reduceOnly: boolean = false
 ): Promise<OrderResponse> {
   if (!API_KEY || !API_SECRET) {
@@ -461,7 +461,7 @@ export async function cancelOrder(orderId: string) {
 /**
  * Closes any open position for the given symbol
  */
-export async function cleanupPosition(symbol: string = 'PF_ETHUSD'): Promise<boolean> {
+export async function cleanupPosition(symbol: string): Promise<boolean> {
   try {
     const response = await getOpenPositions()
     const positions = response.data.openPositions || []

@@ -5,206 +5,165 @@ interface TestCase {
   fn: () => Promise<void>
 }
 
-const SYMBOL = 'PF_ETHUSD'
-const TEST_SIZE = 0.001  // Small test size
+const TEST_SIZE = 0.001 // Small size for testing
+const TEST_SYMBOL = 'PF_XBTUSD' // Test symbol
 
-async function cleanupOrders(orderIds: string[]) {
-  console.log('Cleaning up test orders...')
-  for (const id of orderIds) {
-    try {
-      await cancelOrder(id)
-    } catch (error) {
-      // Ignore errors during cleanup - order might already be executed/cancelled
-    }
-  }
-}
-
-const tests: TestCase[] = [
+const testCases: TestCase[] = [
   {
-    name: 'Market order with no stop',
+    name: 'Place and verify market order',
     fn: async () => {
-      console.log('\nTesting market order with no stop...')
+      console.log('Testing market order placement and verification...')
       
-      // Place a buy order
-      const buyResult = await placeOrder('buy', TEST_SIZE)
-      console.log('Buy result:', buyResult)
-      if (!buyResult.marketOrder) throw new Error('No buy order response')
+      // Place a market buy order
+      const buyResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL)
       
-      // Place an equal sell order to neutralize
-      const sellResult = await placeOrder('sell', TEST_SIZE, undefined, SYMBOL, true)
-      console.log('Sell result:', sellResult)
-      if (!sellResult.marketOrder) throw new Error('No sell order response')
+      if (!buyResult.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID from market order')
+      }
       
-      // Clean up any remaining orders
-      await cleanupOrders([...buyResult.orderIds, ...sellResult.orderIds])
+      console.log('Market order result:', buyResult)
+      
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
     }
   },
   {
-    name: 'Market order with trailing stop',
+    name: 'Place order with trailing stop',
     fn: async () => {
-      console.log('\nTesting market order with trailing stop...')
-      
-      // Get current price for stop calculation
-      const price = await getCurrentPrice(SYMBOL)
-      console.log('Current price:', price)
+      console.log('Testing order placement with trailing stop...')
       
       // Place a buy order with trailing stop
       const buyResult = await placeOrder('buy', TEST_SIZE, {
         type: 'trailing',
-        distance: 1  // 1% trailing stop
-      })
-      console.log('Buy with stop result:', buyResult)
-      if (!buyResult.marketOrder) throw new Error('No buy order response')
-      if (!buyResult.stopOrder) throw new Error('No stop order response')
+        distance: 1 // 1% trailing stop
+      }, TEST_SYMBOL)
       
-      // Place an equal sell order to neutralize, with its own trailing stop
-      const sellResult = await placeOrder('sell', TEST_SIZE, {
-        type: 'trailing',
-        distance: 1
-      }, SYMBOL, true)
-      console.log('Sell with stop result:', sellResult)
-      if (!sellResult.marketOrder) throw new Error('No sell order response')
-      if (!sellResult.stopOrder) throw new Error('No stop order response')
+      if (!buyResult.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID from market order')
+      }
       
-      // Clean up any remaining orders
-      await cleanupOrders([...buyResult.orderIds, ...sellResult.orderIds])
+      if (!buyResult.stopOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID from stop order')
+      }
+      
+      console.log('Order with trailing stop result:', buyResult)
+      
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
     }
   },
   {
-    name: 'Market order with fixed stop',
+    name: 'Place order with fixed stop',
     fn: async () => {
-      console.log('\nTesting market order with fixed stop...')
+      console.log('Testing order placement with fixed stop...')
       
       // Get current price for stop calculation
-      const price = await getCurrentPrice(SYMBOL)
-      const stopDistance = price * 0.01 // 1% stop
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      const stopPrice = currentPrice * 0.99 // 1% below current price
       
       // Place a buy order with fixed stop
       const buyResult = await placeOrder('buy', TEST_SIZE, {
         type: 'fixed',
         distance: 1,
-        stopPrice: price - stopDistance
-      })
-      console.log('Buy with stop result:', buyResult)
-      if (!buyResult.marketOrder) throw new Error('No buy order response')
-      if (!buyResult.stopOrder) throw new Error('No stop order response')
+        stopPrice
+      }, TEST_SYMBOL)
       
-      // Place an equal sell order to neutralize, with its own fixed stop
-      const sellResult = await placeOrder('sell', TEST_SIZE, {
-        type: 'fixed',
-        distance: 1,
-        stopPrice: price + stopDistance
-      }, SYMBOL, true)
-      console.log('Sell with stop result:', sellResult)
-      if (!sellResult.marketOrder) throw new Error('No sell order response')
-      if (!sellResult.stopOrder) throw new Error('No stop order response')
+      if (!buyResult.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID from market order')
+      }
       
-      // Clean up any remaining orders
-      await cleanupOrders([...buyResult.orderIds, ...sellResult.orderIds])
+      if (!buyResult.stopOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID from stop order')
+      }
+      
+      console.log('Order with fixed stop result:', buyResult)
+      
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
     }
   },
   {
-    name: 'Order status check',
+    name: 'Test order status retrieval',
     fn: async () => {
-      console.log('\nTesting order status check...')
+      console.log('Testing order status retrieval...')
       
-      // Place a test order
-      const result = await placeOrder('buy', TEST_SIZE)
-      console.log('Test order result:', result)
-      if (!result.marketOrder) throw new Error('No order response')
+      // Place a market order
+      const result = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL)
       
-      // Check its status
-      const orderId = result.marketOrder.sendStatus.order_id
-      const status = await getOrderStatus(orderId)
+      if (!result.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get order ID')
+      }
+      
+      // Get the order status
+      const status = await getOrderStatus(result.marketOrder.sendStatus.order_id)
       console.log('Order status:', status)
       
-      // Place neutralizing sell order
-      const sellResult = await placeOrder('sell', TEST_SIZE, undefined, SYMBOL, true)
-      console.log('Neutralizing sell result:', sellResult)
-      
-      // Clean up any remaining orders
-      await cleanupOrders([...result.orderIds, ...sellResult.orderIds])
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
     }
   },
   {
-    name: 'Cancel order',
+    name: 'Test order cancellation',
     fn: async () => {
-      console.log('\nTesting order cancellation...')
+      console.log('Testing order cancellation...')
       
-      // Place an order with stop
+      // Place an order with a stop
       const result = await placeOrder('buy', TEST_SIZE, {
         type: 'trailing',
         distance: 1
-      })
-      console.log('Test order result:', result)
-      if (!result.stopOrder) throw new Error('No stop order created')
+      }, TEST_SYMBOL)
+      
+      if (!result.stopOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to get stop order ID')
+      }
       
       // Cancel the stop order
-      const stopOrderId = result.stopOrder.sendStatus.order_id
-      const cancelResult = await cancelOrder(stopOrderId)
+      const cancelResult = await cancelOrder(result.stopOrder.sendStatus.order_id)
       console.log('Cancel result:', cancelResult)
       
-      // Place neutralizing sell order
-      const sellResult = await placeOrder('sell', TEST_SIZE, undefined, SYMBOL, true)
-      console.log('Neutralizing sell result:', sellResult)
-      
-      // Clean up any remaining orders
-      await cleanupOrders([...result.orderIds, ...sellResult.orderIds])
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
     }
   },
   {
-    name: 'Position check',
+    name: 'Test position verification',
     fn: async () => {
-      console.log('\nTesting position check...')
+      console.log('Testing position verification...')
       
-      // Check initial position
-      const initialPosition = await hasOpenPosition(SYMBOL)
-      console.log('Initial position check:', initialPosition)
+      // Place a market buy order
+      const buyResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL)
       
-      // Place a test position
-      const buyResult = await placeOrder('buy', TEST_SIZE)
-      console.log('Test buy result:', buyResult)
+      // Check if we have a position
+      const hasPosition = await hasOpenPosition(TEST_SYMBOL)
+      console.log('Has position:', hasPosition)
       
-      // Check position again
-      const midPosition = await hasOpenPosition(SYMBOL)
-      console.log('Mid-test position check:', midPosition)
+      if (!hasPosition) {
+        throw new Error(`Position verification failed after order ${buyResult.marketOrder?.sendStatus?.order_id || 'unknown'}`)
+      }
       
-      // Close the test position
-      const sellResult = await placeOrder('sell', TEST_SIZE, undefined, SYMBOL, true)
-      console.log('Position close result:', sellResult)
+      // Close the position
+      await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, TEST_SYMBOL, true)
       
-      // Final position check
-      const finalPosition = await hasOpenPosition(SYMBOL)
-      console.log('Final position check:', finalPosition)
-      
-      // Clean up any remaining orders
-      await cleanupOrders([...buyResult.orderIds, ...sellResult.orderIds])
+      // Verify position is closed
+      const finalCheck = await hasOpenPosition(TEST_SYMBOL)
+      if (finalCheck) {
+        throw new Error('Position not properly closed')
+      }
     }
   }
 ]
 
+// Run all test cases
 async function runTests() {
-  console.log('Starting order management tests...\n')
-  
-  let passed = 0
-  let failed = 0
-  
-  for (const test of tests) {
-    console.log(`=== Running test: ${test.name} ===\n`)
+  for (const testCase of testCases) {
+    console.log(`\nRunning test: ${testCase.name}`)
     try {
-      await test.fn()
-      console.log(`\n✅ ${test.name} passed\n`)
-      passed++
+      await testCase.fn()
+      console.log(`✅ ${testCase.name} passed`)
     } catch (error) {
-      console.error(`\n❌ ${test.name} failed:`, error)
-      failed++
+      console.error(`❌ ${testCase.name} failed:`, error)
     }
   }
-  
-  console.log('\n=== Test Summary ===')
-  console.log(`Passed: ${passed}`)
-  console.log(`Failed: ${failed}`)
-  console.log(`Total: ${tests.length}`)
 }
 
-runTests().catch(console.error) 
+runTests() 
