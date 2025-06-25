@@ -6,15 +6,15 @@ trailPerc = input.float(3.0, title="Trailing Stop %", minval=0.1)
 freezeTriggerPerc = input.float(2.0, title="Freeze Trigger for ratcheted trailing stop", minval=0.1)
 longOnly = input.bool(false, title="Only long positions")
 
-emaFastLen   = input.int(20, title="Fast EMA (entry)")
-emaMid1Len   = input.int(50, title="Medium EMA 1")
-emaMid2Len   = input.int(100, title="Medium EMA 2")
-emaSlowLen   = input.int(200, title="Slow EMA (trend filter)")
+emaFastLen = input.int(20, title="Fast EMA (entry)")
+emaMid1Len = input.int(50, title="Medium EMA 1")
+emaMid2Len = input.int(100, title="Medium EMA 2")
+emaSlowLen = input.int(200, title="Slow EMA (trend filter)")
 
-emaFast  = ta.ema(close, emaFastLen)
-emaMid1  = ta.ema(close, emaMid1Len)
-emaMid2  = ta.ema(close, emaMid2Len)
-emaSlow  = ta.ema(close, emaSlowLen)
+emaFast = ta.ema(close, emaFastLen)
+emaMid1 = ta.ema(close, emaMid1Len)
+emaMid2 = ta.ema(close, emaMid2Len)
+emaSlow = ta.ema(close, emaSlowLen)
 
 // Cross detection
 crossover_fast_mid1 = ta.crossover(emaFast, emaMid1)
@@ -67,6 +67,7 @@ isBearish = crossunder_fast_mid1 or crossunder_fast_mid2 or crossunder_fast_slow
 // --- Trailing Stop Variables ---
 var float entryPrice = na
 var float maxPrice = na
+var float minPrice = na
 var float frozenStop = na
 var bool stopFrozen = false
 
@@ -87,33 +88,50 @@ if finalCross and isBearish
     if strategy.position_size >= 0 and not longOnly
         strategy.entry("Short", strategy.short)
         entryPrice := close
-        maxPrice := close
+        minPrice := close
         frozenStop := na
         stopFrozen := false
 
-// --- Update trailing stop ---
+// --- LONG trailing stop ---
 if strategy.position_size > 0
-    maxPrice := math.max(maxPrice, close)
+    maxPrice := na(maxPrice) ? close : math.max(maxPrice, close)
     trailStop = maxPrice - (trailPerc / 100) * entryPrice
     freezeLevel = entryPrice * (1 + freezeTriggerPerc / 100)
 
     if not stopFrozen and maxPrice >= freezeLevel
         frozenStop := trailStop
         stopFrozen := true
+        label.new(bar_index, low, "🧊 Freeze Long", style=label.style_label_up, color=color.green, textcolor=color.white)
 
     stopLevel = stopFrozen ? frozenStop : trailStop
+    line.new(bar_index[1], stopLevel, bar_index, stopLevel, color=color.green, width=1, extend=extend.none)
+
     if close <= stopLevel
         strategy.close("Long")
+        label.new(bar_index, low, "❌ Stop Long", style=label.style_label_down, color=color.orange, textcolor=color.black)
+        entryPrice := na
+        maxPrice := na
+        frozenStop := na
+        stopFrozen := false
 
+// --- SHORT trailing stop ---
 if strategy.position_size < 0
-    maxPrice := math.min(maxPrice, close)
-    trailStop = maxPrice + (trailPerc / 100) * entryPrice
+    minPrice := na(minPrice) ? close : math.min(minPrice, close)
+    trailStop = minPrice + (trailPerc / 100) * entryPrice
     freezeLevel = entryPrice * (1 - freezeTriggerPerc / 100)
 
-    if not stopFrozen and maxPrice <= freezeLevel
+    if not stopFrozen and minPrice <= freezeLevel
         frozenStop := trailStop
         stopFrozen := true
+        label.new(bar_index, high, "🧊 Freeze Short", style=label.style_label_down, color=color.red, textcolor=color.white)
 
     stopLevel = stopFrozen ? frozenStop : trailStop
+    line.new(bar_index[1], stopLevel, bar_index, stopLevel, color=color.red, width=1, extend=extend.none)
+
     if close >= stopLevel
         strategy.close("Short")
+        label.new(bar_index, high, "❌ Stop Short", style=label.style_label_up, color=color.orange, textcolor=color.black)
+        entryPrice := na
+        minPrice := na
+        frozenStop := na
+        stopFrozen := false
