@@ -4,10 +4,10 @@ import { getDb } from '../../lib/mongodb.js'
 
 // Strategy parameters
 const LOOKBACK_WINDOW = 18
-const TRAILING_STOP_PERCENT = 6
-const FREEZE_TRIGGER_PERCENT = 2
+const TRAILING_STOP_PERCENT = 3
+const FREEZE_TRIGGER_PERCENT = 1
 const LONG_ONLY = false
-const POSITION_SIZE = 0.008 // Size in BTC 
+const POSITION_SIZE = 0.014 // Size in BTC 
 const TRADING_PAIR = 'PF_XBTUSD'
 const TIMEFRAME = 60 // 60 minutes = 1 hour
 const DB_NAME = 'emas'
