@@ -1,6 +1,6 @@
 {
     "name": "emas",
-    "enabled": false,
+    "enabled": true,
     "description": "EMA crossover strategy with ratcheted trailing stop",
     "cronSchedule": "0 * * * *"
   } 
