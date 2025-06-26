@@ -1,5 +1,5 @@
-import { getEMAs, CandleData } from '../../trading/indicators.js'
-import { placeOrder, replaceStopOrder, hasOpenPosition } from '../../trading/kraken.js'
+import { getEMAs } from '../../trading/indicators.js'
+import { placeOrder, hasOpenPosition } from '../../trading/kraken.js'
 import { getDb } from '../../lib/mongodb.js'
 
 // ——--- USER INPUTS ---——
