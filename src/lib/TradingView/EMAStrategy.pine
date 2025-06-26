@@ -1,137 +1,115 @@
 //@version=6
-strategy("EMA 20 Crosses All 3 - Flip + Ratcheted Trailing Stop", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("EMA-20 clears 3 EMAs + Optional Exits + Plot TR", 
+  overlay=true, 
+  default_qty_type=strategy.percent_of_equity, 
+  default_qty_value=100)
 
-nBars = input.int(24, minval=1, title="Lookback window")
-trailPerc = input.float(3.0, title="Trailing Stop %", minval=0.1)
-freezeTriggerPerc = input.float(2.0, title="Freeze Trigger for ratcheted trailing stop", minval=0.1)
-longOnly = input.bool(false, title="Only long positions")
-
+// ——--- USER INPUTS ---——
 emaFastLen = input.int(20, title="Fast EMA (entry)")
-emaMid1Len = input.int(50, title="Medium EMA 1")
-emaMid2Len = input.int(100, title="Medium EMA 2")
-emaSlowLen = input.int(200, title="Slow EMA (trend filter)")
+ema50Len   = input.int(50, title="EMA 50")
+ema100Len  = input.int(100, title="EMA 100")
+ema200Len  = input.int(200, title="EMA 200")
 
-emaFast = ta.ema(close, emaFastLen)
-emaMid1 = ta.ema(close, emaMid1Len)
-emaMid2 = ta.ema(close, emaMid2Len)
-emaSlow = ta.ema(close, emaSlowLen)
+useTP = input.bool(true,  title="Use Take-Profit")
+tpPct = input.float(2.0,  title="Take-Profit %",      minval=0.1, step=0.1)
 
-// Cross detection
-crossover_fast_mid1 = ta.crossover(emaFast, emaMid1)
-crossunder_fast_mid1 = ta.crossunder(emaFast, emaMid1)
-cross_fast_mid1_now = crossover_fast_mid1 or crossunder_fast_mid1
+useSL = input.bool(true,  title="Use Fixed Stop-Loss")
+slPct = input.float(1.0,  title="Stop-Loss %",         minval=0.1, step=0.1)
 
-crossover_fast_mid2 = ta.crossover(emaFast, emaMid2)
-crossunder_fast_mid2 = ta.crossunder(emaFast, emaMid2)
-cross_fast_mid2_now = crossover_fast_mid2 or crossunder_fast_mid2
+useTR = input.bool(false, title="Use Trailing Stop")
+trPct = input.float(1.0,  title="Trailing Stop %",     minval=0.1, step=0.1)
 
-crossover_fast_slow = ta.crossover(emaFast, emaSlow)
-crossunder_fast_slow = ta.crossunder(emaFast, emaSlow)
-cross_fast_slow_now = crossover_fast_slow or crossunder_fast_slow
+// ——--- EMA CALCS & PLOTS ---——
+ema20  = ta.ema(close, emaFastLen)
+ema50  = ta.ema(close, ema50Len)
+ema100 = ta.ema(close, ema100Len)
+ema200 = ta.ema(close, ema200Len)
 
-// History buffers
-var bool[] crossed_fast_mid1_buf = array.new_bool()
-var bool[] crossed_fast_mid2_buf = array.new_bool()
-var bool[] crossed_fast_slow_buf = array.new_bool()
+plot(ema20,  color=color.white,  linewidth=2, title="EMA-20")
+plot(ema50,  color=color.orange, linewidth=1, title="EMA-50")
+plot(ema100, color=color.purple, linewidth=1, title="EMA-100")
+plot(ema200, color=color.red,    linewidth=1, title="EMA-200")
 
-array.unshift(crossed_fast_mid1_buf, cross_fast_mid1_now)
-array.unshift(crossed_fast_mid2_buf, cross_fast_mid2_now)
-array.unshift(crossed_fast_slow_buf, cross_fast_slow_now)
+// ——--- ENTRY LOGIC (long & short) ---——
+longSignal  = ema20 > ema200 and ema20 > ema50 and ema20 > ema100
+shortSignal = ta.crossunder(ema20, ema200) and ema20 < ema50 and ema20 < ema100
 
-if array.size(crossed_fast_mid1_buf) > nBars
-    array.pop(crossed_fast_mid1_buf)
-if array.size(crossed_fast_mid2_buf) > nBars
-    array.pop(crossed_fast_mid2_buf)
-if array.size(crossed_fast_slow_buf) > nBars
-    array.pop(crossed_fast_slow_buf)
-
-// Check recent crosses
-hasCrossed(buf) =>
-    result = false
-    for i = 0 to array.size(buf) - 1
-        result := result or array.get(buf, i)
-    result
-
-crossed_fast_mid1_recent = hasCrossed(crossed_fast_mid1_buf)
-crossed_fast_mid2_recent = hasCrossed(crossed_fast_mid2_buf)
-crossed_fast_slow_recent = hasCrossed(crossed_fast_slow_buf)
-
-// Final cross logic
-finalCross = (cross_fast_mid1_now and crossed_fast_mid2_recent and crossed_fast_slow_recent) or
-             (cross_fast_mid2_now and crossed_fast_mid1_recent and crossed_fast_slow_recent) or
-             (cross_fast_slow_now and crossed_fast_mid1_recent and crossed_fast_mid2_recent)
-
-isBullish = crossover_fast_mid1 or crossover_fast_mid2 or crossover_fast_slow
-isBearish = crossunder_fast_mid1 or crossunder_fast_mid2 or crossunder_fast_slow
-
-// --- Trailing Stop Variables ---
-var float entryPrice = na
-var float maxPrice = na
-var float minPrice = na
-var float frozenStop = na
-var bool stopFrozen = false
-
-// Reset on new entry
-if finalCross and isBullish
+if longSignal
     if strategy.position_size < 0
         strategy.close("Short")
-    if strategy.position_size <= 0
         strategy.entry("Long", strategy.long)
-        entryPrice := close
-        maxPrice := close
-        frozenStop := na
-        stopFrozen := false
+    else if strategy.position_size == 0
+        strategy.entry("Long", strategy.long)
 
-if finalCross and isBearish
+if shortSignal
     if strategy.position_size > 0
         strategy.close("Long")
-    if strategy.position_size >= 0 and not longOnly
         strategy.entry("Short", strategy.short)
-        entryPrice := close
-        minPrice := close
-        frozenStop := na
-        stopFrozen := false
+    else if strategy.position_size == 0
+        strategy.entry("Short", strategy.short)
 
-// --- LONG trailing stop ---
-if strategy.position_size > 0
-    maxPrice := na(maxPrice) ? close : math.max(maxPrice, close)
-    trailStop = maxPrice - (trailPerc / 100) * entryPrice
-    freezeLevel = entryPrice * (1 + freezeTriggerPerc / 100)
+// ——--- EXIT CALCULATIONS & TRAILING-STOP PLOT STATE ---——
+var float tpPriceLong   = na
+var float tpPriceShort  = na
+var float slPriceLong   = na
+var float slPriceShort  = na
+var float trOffsetTick  = na
+var float trailingStop  = na
 
-    if not stopFrozen and maxPrice >= freezeLevel
-        frozenStop := trailStop
-        stopFrozen := true
-        label.new(bar_index, low, "🧊 Freeze Long", style=label.style_label_up, color=color.green, textcolor=color.white)
+inLong  = strategy.position_size > 0
+inShort = strategy.position_size < 0
 
-    stopLevel = stopFrozen ? frozenStop : trailStop
-    line.new(bar_index[1], stopLevel, bar_index, stopLevel, color=color.green, width=1, extend=extend.none)
+if strategy.position_size != 0
+    entry     = strategy.position_avg_price
+    ticksConv = 1.0 / syminfo.mintick
+    // TP & fixed SL
+    tpPriceLong  := inLong  and useTP ? entry * (1 + tpPct/100) : na
+    tpPriceShort := inShort and useTP ? entry * (1 - tpPct/100) : na
+    slPriceLong  := inLong  and useSL ? entry * (1 - slPct/100) : na
+    slPriceShort := inShort and useSL ? entry * (1 + slPct/100) : na
 
-    if close <= stopLevel
-        strategy.close("Long")
-        label.new(bar_index, low, "❌ Stop Long", style=label.style_label_down, color=color.orange, textcolor=color.black)
-        entryPrice := na
-        maxPrice := na
-        frozenStop := na
-        stopFrozen := false
+    // On the very bar we enter, capture static tick-offset & initial stopLevel
+    if useTR and na(trOffsetTick)
+        trOffsetTick := (entry * trPct/100) * ticksConv
+        // priceDist in raw price
+        priceDist    = trOffsetTick * syminfo.mintick
+        // set initial trailingStop
+        trailingStop := inLong ? entry - priceDist : entry + priceDist
+else
+    // flat → reset
+    trOffsetTick := na
+    trailingStop := na
 
-// --- SHORT trailing stop ---
-if strategy.position_size < 0
-    minPrice := na(minPrice) ? close : math.min(minPrice, close)
-    trailStop = minPrice + (trailPerc / 100) * entryPrice
-    freezeLevel = entryPrice * (1 - freezeTriggerPerc / 100)
+// update trailingStop each bar if enabled
+priceDist = useTR and not na(trOffsetTick) ? trOffsetTick * syminfo.mintick : na
+if useTR
+    if inLong
+        trailingStop := math.max(high  - priceDist, nz(trailingStop))
+    else if inShort
+        trailingStop := math.min(low   + priceDist, nz(trailingStop))
+    else
+        trailingStop := na
 
-    if not stopFrozen and minPrice <= freezeLevel
-        frozenStop := trailStop
-        stopFrozen := true
-        label.new(bar_index, high, "🧊 Freeze Short", style=label.style_label_down, color=color.red, textcolor=color.white)
+// ——--- APPLY EXITS ---——
+if inLong
+    strategy.exit("Long Exit",
+      from_entry   = "Long",
+      limit        = tpPriceLong,
+      stop         = slPriceLong,
+      trail_offset = trOffsetTick,
+      trail_points = useTR ? 0 : na)
 
-    stopLevel = stopFrozen ? frozenStop : trailStop
-    line.new(bar_index[1], stopLevel, bar_index, stopLevel, color=color.red, width=1, extend=extend.none)
+if inShort
+    strategy.exit("Short Exit",
+      from_entry   = "Short",
+      limit        = tpPriceShort,
+      stop         = slPriceShort,
+      trail_points = useTR ? 0 : na,
+      trail_offset = trOffsetTick)
 
-    if close >= stopLevel
-        strategy.close("Short")
-        label.new(bar_index, high, "❌ Stop Short", style=label.style_label_up, color=color.orange, textcolor=color.black)
-        entryPrice := na
-        minPrice := na
-        frozenStop := na
-        stopFrozen := false
+// ——--- PLOT TRAILING STOP LEVEL — only when in a trade ———
+stopLevel = useTR and strategy.position_size != 0 and not na(trailingStop)
+  ? trailingStop
+  : na
+
+plot(stopLevel,title="Trailing Stop",color=color.aqua,linewidth=2,style=plot.style_linebr)
