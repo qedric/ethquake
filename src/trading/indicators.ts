@@ -110,6 +110,8 @@ async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 2
 
 export type CandleData = {
   price: number
+  high: number
+  low: number
   timestamp: Date
   [key: `ema${number}`]: number
 }
@@ -129,7 +131,27 @@ export async function getEMAs(
     // Add lookbackCandles to ensure we have enough data for historical calculations
     const minDataPoints = maxPeriod * 3
     const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
-    const prices = await getKrakenOHLCData(pair, interval, hoursNeeded)
+    const response = await axios.get(
+      `https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${interval}&since=${Math.floor(Date.now() / 1000) - hoursNeeded * 3600}`
+    )
+    
+    if (response.data.error && response.data.error.length > 0) {
+      throw new Error(`Kraken API error: ${response.data.error.join(', ')}`)
+    }
+    
+    // Find the first property in the result object that's not "last"
+    const pairData = Object.keys(response.data.result)
+      .filter(key => key !== 'last')
+      .map(key => response.data.result[key])[0]
+    
+    if (!pairData || !Array.isArray(pairData)) {
+      throw new Error('Unexpected response format from Kraken API')
+    }
+    
+    // Kraken returns data in format [time, open, high, low, close, vwap, volume, count]
+    const prices = pairData.map((candle: any) => parseFloat(candle[4])) // close prices
+    const highs = pairData.map((candle: any) => parseFloat(candle[2]))  // high prices
+    const lows = pairData.map((candle: any) => parseFloat(candle[3]))   // low prices
     
     if (!prices || prices.length < lookbackCandles + 1) {
       throw new Error(`Failed to fetch enough price data. Need at least ${lookbackCandles + 1} candles`)
@@ -142,6 +164,8 @@ export async function getEMAs(
 
     // We'll return this many recent candles (including current)
     const recentPrices = prices.slice(-lookbackCandles)
+    const recentHighs = highs.slice(-lookbackCandles)
+    const recentLows = lows.slice(-lookbackCandles)
     
     // Calculate EMAs for each historical point
     return recentPrices.map((price, idx) => {
@@ -158,6 +182,8 @@ export async function getEMAs(
 
       return {
         price,
+        high: recentHighs[idx],
+        low: recentLows[idx],
         ...emas,
         timestamp: new Date(Date.now() - (lookbackCandles - 1 - idx) * interval * 60 * 1000)
       }

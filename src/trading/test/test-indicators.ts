@@ -21,10 +21,16 @@ const tests: TestCase[] = [
         throw new Error('Invalid EMA structure')
       }
       
-      // Validate EMA values
+      // Validate EMA values and OHLC data
       const validateCandle = (candle: CandleData) => {
         if (typeof candle.price !== 'number' || isNaN(candle.price)) {
           throw new Error('Invalid price value')
+        }
+        if (typeof candle.high !== 'number' || isNaN(candle.high)) {
+          throw new Error('Invalid high value')
+        }
+        if (typeof candle.low !== 'number' || isNaN(candle.low)) {
+          throw new Error('Invalid low value')
         }
         if (!(candle.timestamp instanceof Date)) {
           throw new Error('Invalid timestamp')
@@ -34,6 +40,13 @@ const tests: TestCase[] = [
             typeof candle.ema100 !== 'number' || isNaN(candle.ema100) ||
             typeof candle.ema200 !== 'number' || isNaN(candle.ema200)) {
           throw new Error('Invalid EMA values')
+        }
+        // Validate OHLC relationships
+        if (candle.high < candle.price || candle.low > candle.price) {
+          throw new Error('Invalid OHLC relationship: close price outside high-low range')
+        }
+        if (candle.high < candle.low) {
+          throw new Error('Invalid OHLC relationship: high less than low')
         }
       }
       
@@ -107,6 +120,51 @@ const tests: TestCase[] = [
       
       console.log(`Validated ${result.length} historical data points`)
     }
+  },
+  {
+    name: 'OHLC data integrity',
+    fn: async () => {
+      console.log('\nTesting OHLC data integrity...')
+      const result = await getEMAs('ETHUSD', 15, [20, 50, 100, 200], 10)
+      
+      // Validate price ranges and relationships
+      result.forEach((candle, i) => {
+        console.log(`Candle ${i}:`, {
+          timestamp: candle.timestamp,
+          high: candle.high,
+          low: candle.low,
+          close: candle.price
+        })
+        
+        // Check price ranges
+        if (candle.high < candle.low) {
+          throw new Error(`Invalid high-low range at index ${i}`)
+        }
+        if (candle.price > candle.high || candle.price < candle.low) {
+          throw new Error(`Close price outside high-low range at index ${i}`)
+        }
+        
+        // Check for reasonable price ranges (high-low spread)
+        const spread = ((candle.high - candle.low) / candle.low) * 100
+        if (spread > 20) { // Alert if spread > 20%
+          console.warn(`Warning: Large price spread (${spread.toFixed(2)}%) at index ${i}`)
+        }
+      })
+      
+      // Check for sequence integrity
+      for (let i = 1; i < result.length; i++) {
+        const curr = result[i]
+        const prev = result[i - 1]
+        const timeDiff = curr.timestamp.getTime() - prev.timestamp.getTime()
+        const expectedDiff = 15 * 60 * 1000 // 15 minutes in milliseconds
+        
+        if (Math.abs(timeDiff - expectedDiff) > 1000) { // Allow 1 second tolerance
+          throw new Error(`Unexpected time gap between candles at index ${i}`)
+        }
+      }
+      
+      console.log('OHLC data integrity validated')
+    }
   }
 ]
 
@@ -130,7 +188,7 @@ async function runTests() {
   console.log('\n=== Test Summary ===')
   console.log(`Passed: ${passed}`)
   console.log(`Failed: ${failed}`)
-  console.log(`Total: ${tests.length} `)
+  console.log(`Total: ${tests.length}`)
   
   if (failed > 0) process.exit(1)
   process.exit(0)
