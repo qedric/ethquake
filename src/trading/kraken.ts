@@ -111,7 +111,7 @@ export async function getCurrentPrice(symbol: string): Promise<number> {
 
 const MAX_VERIFICATION_ATTEMPTS = 3
 const VERIFICATION_DELAY_MS = 1000
-const INITIAL_VERIFICATION_DELAY_MS = 5000
+const INITIAL_VERIFICATION_DELAY_MS = 3000
 
 /**
  * Verifies that an order exists and is in the expected state
@@ -157,7 +157,7 @@ async function verifyOrderCancelled(orderId: string): Promise<boolean> {
   while (attempts < MAX_VERIFICATION_ATTEMPTS) {
     try {
       const orderStatus = await getOrderStatus(orderId)
-      if (orderStatus.status === 'cancelled') {
+      if (orderStatus.status.toLowerCase() === 'cancelled') {
         return true
       }
       console.log(`Order ${orderId} status: ${orderStatus.status}, expected: cancelled. Attempt ${attempts + 1}/${MAX_VERIFICATION_ATTEMPTS}`)
@@ -194,7 +194,7 @@ export async function replaceStopOrder(
 
     // Verify the new stop is active
     const newOrderId = newStopResult.stopOrder.sendStatus.order_id
-    const newStopVerified = await verifyOrder(newOrderId)
+    const newStopVerified = await verifyOrder(newOrderId, 'placed', true)
     if (!newStopVerified) {
       throw new Error('Failed to verify new stop order')
     }
@@ -298,7 +298,7 @@ export async function placeOrder(
 
     // Create the take profit order data if needed
     const takeProfitOrderData = takeProfitConfig.type === 'limit' ? {
-      orderType: 'stp',
+      orderType: 'take_profit',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: size,
@@ -373,7 +373,7 @@ export async function placeOrder(
 
         // Verify take profit order
         if (takeProfitOrderId) {
-          const takeProfitOrderVerified = await verifyOrder(takeProfitOrderId, 'placed', false)
+          const takeProfitOrderVerified = await verifyOrder(takeProfitOrderId, 'placed', true)
           if (!takeProfitOrderVerified) {
             // If verification fails, try to cancel the order
             if (takeProfitOrderId) {
@@ -428,18 +428,24 @@ export async function placeOrder(
 }
 
 export async function getOpenPositions() {
+  if (!API_KEY || !API_SECRET) {
+    throw new Error('Kraken API credentials not configured')
+  }
 
   const nonce = Date.now().toString()
-  const signature = getKrakenSignature('/api/v3/openpositions', nonce, '{}')
+  const payload = {}  // Empty payload for GET request
+  const data = querystring.stringify(payload)
+  const signature = getKrakenSignature('/api/v3/openpositions', nonce, data)
 
   let config = {
     method: 'get',
     maxBodyLength: Infinity,
     url: 'https://futures.kraken.com/derivatives/api/v3/openpositions',
     headers: {
-      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
       'APIKey': API_KEY,
-      'Authent': signature
+      'Authent': signature,
+      'Nonce': nonce
     }
   }
 
@@ -449,7 +455,6 @@ export async function getOpenPositions() {
     console.error('API Error:', (error as any).response?.data || (error as any).message)
     throw error
   }
-
 }
 
 export async function getOrderStatus(orderId: string) {
