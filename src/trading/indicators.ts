@@ -65,48 +65,6 @@ function calculateEMA(prices: number[], period: number) {
  * @param {Number} hoursNeeded - How many hours of historical data needed
  * @returns {Array} - Array of closing prices
  */
-async function getKrakenOHLCData(pair = 'ETHUSD', interval = 60, hoursNeeded = 200) {
-  try {
-    // Calculate the 'since' timestamp (current time minus needed hours)
-    // Convert hours to seconds and account for the interval
-    const now = Math.floor(Date.now() / 1000)
-    const secondsNeeded = hoursNeeded * 3600
-    const since = now - secondsNeeded
-    
-    /* console.log(`Fetching OHLC data for ${pair}:`)
-    console.log(`- Interval: ${interval} minutes`)
-    console.log(`- Hours needed: ${hoursNeeded}`)
-    console.log(`- Since timestamp: ${since} (${new Date(since * 1000).toISOString()})`) */
-    
-    const response = await axios.get(
-      `https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${interval}&since=${since}`
-    )
-    
-    if (response.data.error && response.data.error.length > 0) {
-      throw new Error(`Kraken API error: ${response.data.error.join(', ')}`)
-    }
-    
-    // Find the first property in the result object that's not "last"
-    const pairData = Object.keys(response.data.result)
-      .filter(key => key !== 'last')
-      .map(key => response.data.result[key])[0]
-    
-    if (!pairData || !Array.isArray(pairData)) {
-      throw new Error('Unexpected response format from Kraken API')
-    }
-    
-    console.log(`Received ${pairData.length} candles from Kraken API`)
-    console.log(`First candle time: ${new Date(pairData[0][0] * 1000).toISOString()}`)
-    console.log(`Last candle time: ${new Date(pairData[pairData.length - 1][0] * 1000).toISOString()}`)
-    
-    // Kraken returns data in format [time, open, high, low, close, vwap, volume, count]
-    // Extract just the closing prices (index 4)
-    return pairData.map((candle: any) => parseFloat(candle[4]))
-  } catch (error) {
-    console.error('Error fetching Kraken OHLC data:', error)
-    throw error
-  }
-}
 
 export type CandleData = {
   price: number
