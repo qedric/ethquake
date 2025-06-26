@@ -75,6 +75,23 @@ interface FixedStopConfig extends BaseStopConfig {
 
 type StopConfig = NoStopConfig | TrailingStopConfig | FixedStopConfig
 
+type TakeProfitType = 'none' | 'limit'
+
+interface BaseTakeProfitConfig {
+  type: TakeProfitType
+  price: number
+}
+
+interface NoTakeProfitConfig extends BaseTakeProfitConfig {
+  type: 'none'
+}
+
+interface LimitTakeProfitConfig extends BaseTakeProfitConfig {
+  type: 'limit'
+}
+
+type TakeProfitConfig = NoTakeProfitConfig | LimitTakeProfitConfig
+
 /**
  * Gets the current price for a symbol
  */
@@ -170,7 +187,7 @@ export async function replaceStopOrder(
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
     // First place the new stop
-    const newStopResult = await placeOrder(side, size, newStopConfig, symbol, true)
+    const newStopResult = await placeOrder(side, size, newStopConfig, { type: 'none', price: 0 }, symbol, true)
     if (!newStopResult.stopOrder?.sendStatus?.order_id) {
       throw new Error('Failed to place new stop order')
     }
@@ -217,6 +234,13 @@ interface OrderResponse {
       status: string
     }
   } | null
+  takeProfitOrder: {
+    result: string
+    sendStatus: {
+      order_id: string
+      status: string
+    }
+  } | null
   status?: string
   error?: string
   orderIds: string[]  // Add this to track all orders created
@@ -229,6 +253,7 @@ export async function placeOrder(
   side: 'buy' | 'sell',
   size: number,
   stopConfig: StopConfig = { type: 'none', distance: 0 },
+  takeProfitConfig: TakeProfitConfig = { type: 'none', price: 0 },
   symbol: string,
   reduceOnly: boolean = false
 ): Promise<OrderResponse> {
@@ -238,6 +263,7 @@ export async function placeOrder(
 
   let marketOrderId: string | null = null
   let stopOrderId: string | null = null
+  let takeProfitOrderId: string | null = null
   let orderIds: string[] = []  // Track all orders created in this operation
 
   try {
@@ -267,6 +293,17 @@ export async function placeOrder(
       size: size,
       stopPrice: stopConfig.stopPrice,
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
+      triggerSignal: 'mark'
+    } : null
+
+    // Create the take profit order data if needed
+    const takeProfitOrderData = takeProfitConfig.type === 'limit' ? {
+      orderType: 'stp',
+      symbol: symbol,
+      side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
+      size: size,
+      stopPrice: takeProfitConfig.price,
+      reduceOnly: true,  // Always true for take profit orders to prevent position stacking
       triggerSignal: 'mark'
     } : null
 
@@ -325,9 +362,38 @@ export async function placeOrder(
         }
       }
 
+      let takeProfitOrderResult = null
+      if (takeProfitOrderData) {
+        takeProfitOrderResult = await sendOrder(takeProfitOrderData)
+        console.log('takeProfitOrderResult:', takeProfitOrderResult.data)
+
+        // Store the take profit order ID for potential cleanup
+        takeProfitOrderId = takeProfitOrderResult.data.sendStatus?.order_id || null
+        if (takeProfitOrderId) orderIds.push(takeProfitOrderId)
+
+        // Verify take profit order
+        if (takeProfitOrderId) {
+          const takeProfitOrderVerified = await verifyOrder(takeProfitOrderId, 'placed', false)
+          if (!takeProfitOrderVerified) {
+            // If verification fails, try to cancel the order
+            if (takeProfitOrderId) {
+              console.log(`Verification failed for take profit order ${takeProfitOrderId}, attempting to cancel...`)
+              try {
+                await cancelOrder(takeProfitOrderId)
+                console.log(`Successfully cancelled take profit order ${takeProfitOrderId}`)
+              } catch (cancelError) {
+                console.error(`Failed to cancel take profit order ${takeProfitOrderId}:`, cancelError)
+              }
+            }
+            throw new Error('Failed to verify take profit order execution')
+          }
+        }
+      }
+
       return {
         marketOrder: marketOrderResult.data,
         stopOrder: stopOrderResult?.data,
+        takeProfitOrder: takeProfitOrderResult?.data,
         orderIds  // Return the IDs of all orders created
       }
     }
@@ -335,6 +401,7 @@ export async function placeOrder(
     return {
       marketOrder: null,
       stopOrder: null,
+      takeProfitOrder: null,
       orderIds: []
     }
   } catch (error) {
@@ -352,6 +419,7 @@ export async function placeOrder(
     return {
       marketOrder: null,
       stopOrder: null,
+      takeProfitOrder: null,
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
       orderIds: []
@@ -475,7 +543,7 @@ export async function cleanupPosition(symbol: string): Promise<boolean> {
     const side = position.side === 'long' ? 'sell' : 'buy'
     const size = Math.abs(position.size)
     
-    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, symbol, true)
+    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true)
     
     if (result.marketOrder?.result !== 'success') {
       throw new Error('Failed to close position')

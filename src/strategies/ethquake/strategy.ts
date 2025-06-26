@@ -146,7 +146,7 @@ export async function executeTradeStrategy() {
     let orderResult = null
     if (direction === 'buy' || direction === 'sell') {
       console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-      orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, TRADING_PAIR)
+      orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, { type: 'none', price: 0 }, TRADING_PAIR)
     }
 
     // Record the signal and order in the database
