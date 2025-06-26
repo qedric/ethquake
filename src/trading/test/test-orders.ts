@@ -49,7 +49,7 @@ const tests: TestCase[] = [
     name: 'Place order with fixed stop',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
-      const stopPrice = currentPrice * 0.99 // 1% below current price
+      const stopPrice = Math.round(currentPrice * 0.99 * 100) / 100 // 1% below current price, rounded to 2 decimals
 
       // Place a market buy order with fixed stop
       const buyResult = await placeOrder('buy', TEST_SIZE, {
@@ -89,7 +89,7 @@ const tests: TestCase[] = [
     name: 'Place order with take profit',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
-      const takeProfitPrice = currentPrice * 1.01 // 1% above current price
+      const takeProfitPrice = Math.round(currentPrice * 1.01 * 100) / 100 // 1% above current price, rounded to 2 decimals
 
       // Place a market buy order with take profit
       const result = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, {
