@@ -1,5 +1,5 @@
 import { getEMAs } from '../../trading/indicators.js'
-import { placeOrder, hasOpenPosition } from '../../trading/kraken.js'
+import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
 import { getDb } from '../../lib/mongodb.js'
 
 // ——--- USER INPUTS ---——
@@ -24,6 +24,7 @@ const TIMEFRAME = 60         // minutes
 let currentPosition: 'long' | 'short' | null = null
 let entryPrice: number | null = null
 let currentStopOrderId: string | null = null
+let currentTakeProfitOrderId: string | null = null
 let trailingStop: number | null = null
 
 async function loadState() {
@@ -33,11 +34,13 @@ async function loadState() {
     currentPosition = st.currentPosition
     entryPrice = st.entryPrice
     currentStopOrderId = st.currentStopOrderId
+    currentTakeProfitOrderId = st.currentTakeProfitOrderId
     trailingStop = st.trailingStop
     if (currentPosition && ! await hasOpenPosition(TRADING_PAIR)) {
       currentPosition = null
       entryPrice = null
       currentStopOrderId = null
+      currentTakeProfitOrderId = null
       trailingStop = null
     }
   }
@@ -46,7 +49,13 @@ async function loadState() {
 async function saveState() {
   const db = await getDb('emas')
   await db.collection('strategy_state')
-    .replaceOne({}, { currentPosition, entryPrice, currentStopOrderId, trailingStop }, { upsert: true })
+    .replaceOne({}, { 
+      currentPosition, 
+      entryPrice, 
+      currentStopOrderId,
+      currentTakeProfitOrderId, 
+      trailingStop 
+    }, { upsert: true })
 }
 
 export async function runPipelineTask() {
@@ -67,6 +76,7 @@ export async function runPipelineTask() {
   const shortSignal = prev.ema20 >= prev.ema200 && curr.ema20 < curr.ema200 && ema20 < ema50 && ema20 < ema100
 
   // compute exit prices
+  let reCalculateExit = false
   let tpPriceLong: number | null = null
   let tpPriceShort: number | null = null
   let slPriceLong: number | null = null
@@ -76,14 +86,20 @@ export async function runPipelineTask() {
   const inLong = currentPosition === 'long'
   const inShort = currentPosition === 'short'
 
+  // compute exit prices
   if (currentPosition && entryPrice !== null) {
+    reCalculateExit = (inLong && longSignal) || (inShort && shortSignal)
+    // If we get a signal in same direction as current position,
+    // recalculate exits from current price to give trade more room
+    const exitCalcPrice = reCalculateExit ? curr.price : entryPrice
+    
     if (USE_TP) {
-      tpPriceLong = entryPrice * (1 + TP_PCT / 100)
-      tpPriceShort = entryPrice * (1 - TP_PCT / 100)
+      tpPriceLong = exitCalcPrice * (1 + TP_PCT / 100)
+      tpPriceShort = exitCalcPrice * (1 - TP_PCT / 100)
     }
     if (USE_SL) {
-      slPriceLong = entryPrice * (1 - SL_PCT / 100)
-      slPriceShort = entryPrice * (1 + SL_PCT / 100)
+      slPriceLong = exitCalcPrice * (1 - SL_PCT / 100)
+      slPriceShort = exitCalcPrice * (1 + SL_PCT / 100)
     }
     if (USE_TR) {
       // Update trailing stop logic to match Pine script
@@ -98,6 +114,56 @@ export async function runPipelineTask() {
           : Math.min(curr.low + trOffset, trailingStop)
       }
     }
+
+    // If we're recalculating exits, we need to replace the existing orders
+    if (reCalculateExit) {
+      const side = currentPosition === 'long' ? 'buy' : 'sell'
+      
+      // Replace stop order if we have one
+      if (currentStopOrderId && (USE_TR || USE_SL)) {
+        const stopConfig = USE_TR
+          ? { type: 'trailing' as const, distance: trOffset! }
+          : USE_SL
+            ? { type: 'fixed' as const, distance: 0, stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort! }
+            : { type: 'none' as const, distance: 0 }
+
+        const result = await replaceOrder(
+          currentStopOrderId,
+          side,
+          POSITION_SIZE,
+          stopConfig,
+          { type: 'none', price: 0 },
+          TRADING_PAIR,
+          true // isStopOrder
+        )
+        if (result.success && result.newOrderId) {
+          currentStopOrderId = result.newOrderId
+          await saveState()
+        }
+      }
+
+      // Replace take profit order if we have one
+      if (currentTakeProfitOrderId && USE_TP) {
+        const tpConfig = {
+          type: 'limit' as const,
+          price: currentPosition === 'long' ? tpPriceLong! : tpPriceShort!
+        }
+        
+        const result = await replaceOrder(
+          currentTakeProfitOrderId,
+          side,
+          POSITION_SIZE,
+          { type: 'none', distance: 0 },
+          tpConfig,
+          TRADING_PAIR,
+          false // isStopOrder
+        )
+        if (result.success && result.newOrderId) {
+          currentTakeProfitOrderId = result.newOrderId
+          await saveState()
+        }
+      }
+    }
   } else {
     trailingStop = null
   }
@@ -107,6 +173,8 @@ export async function runPipelineTask() {
     if (inShort) {
       await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
       currentPosition = null
+      currentStopOrderId = null
+      currentTakeProfitOrderId = null
       trailingStop = null
     }
     if (!inLong) {
@@ -124,6 +192,7 @@ export async function runPipelineTask() {
       currentPosition = 'long'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
+      currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
       await saveState()
     }
   }
@@ -132,6 +201,8 @@ export async function runPipelineTask() {
     if (inLong) {
       await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
       currentPosition = null
+      currentStopOrderId = null
+      currentTakeProfitOrderId = null
       trailingStop = null
     }
     if (!inShort) {
@@ -149,6 +220,7 @@ export async function runPipelineTask() {
       currentPosition = 'short'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
+      currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
       await saveState()
     }
   }

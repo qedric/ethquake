@@ -34,12 +34,17 @@ plot(ema200, color=color.red,    linewidth=1, title="EMA-200")
 longSignal  = ema20 > ema200 and ema20 > ema50 and ema20 > ema100
 shortSignal = ta.crossunder(ema20, ema200) and ema20 < ema50 and ema20 < ema100
 
+bool reCalcExit = false
+
 if longSignal
     if strategy.position_size < 0
         strategy.close("Short")
         strategy.entry("Long", strategy.long)
     else if strategy.position_size == 0
         strategy.entry("Long", strategy.long)
+    else
+        // we are already long; recalculate Take Profit
+        reCalcExit := true
 
 if shortSignal
     if strategy.position_size > 0
@@ -47,6 +52,9 @@ if shortSignal
         strategy.entry("Short", strategy.short)
     else if strategy.position_size == 0
         strategy.entry("Short", strategy.short)
+    else
+        // we are already short; recalculate Take Profit
+        reCalcExit := true
 
 // ——--- EXIT CALCULATIONS & TRAILING-STOP PLOT STATE ---——
 var float tpPriceLong   = na
@@ -61,12 +69,13 @@ inShort = strategy.position_size < 0
 
 if strategy.position_size != 0
     entry     = strategy.position_avg_price
+    newEntry = reCalcExit ? close : entry
     ticksConv = 1.0 / syminfo.mintick
     // TP & fixed SL
-    tpPriceLong  := inLong  and useTP ? entry * (1 + tpPct/100) : na
-    tpPriceShort := inShort and useTP ? entry * (1 - tpPct/100) : na
-    slPriceLong  := inLong  and useSL ? entry * (1 - slPct/100) : na
-    slPriceShort := inShort and useSL ? entry * (1 + slPct/100) : na
+    tpPriceLong  := inLong  and useTP ? newEntry * (1 + tpPct/100) : na
+    tpPriceShort := inShort and useTP ? newEntry * (1 - tpPct/100) : na
+    slPriceLong  := inLong  and useSL ? newEntry * (1 - slPct/100) : na
+    slPriceShort := inShort and useSL ? newEntry * (1 + slPct/100) : na
 
     // On the very bar we enter, capture static tick-offset & initial stopLevel
     if useTR and na(trOffsetTick)
