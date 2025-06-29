@@ -9,11 +9,11 @@ const EMA_100_LEN = 100
 const EMA_200_LEN = 200
 
 const USE_TP = true
-const TP_PCT = 3.0
-const USE_SL = true
+const TP_PCT = 7.0
+const USE_SL = false
 const SL_PCT = 16.0
-const USE_TR = false
-const TR_PCT = 1.0
+const USE_TR = true
+const TR_PCT = 10.0
 
 // trading config
 const POSITION_SIZE = 0.01  // BTC
