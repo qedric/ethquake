@@ -176,44 +176,55 @@ async function verifyOrderCancelled(orderId: string): Promise<boolean> {
 }
 
 /**
- * Safely replaces one stop order with another
+ * Safely replaces one order with another
  */
-export async function replaceStopOrder(
+export async function replaceOrder(
   oldOrderId: string,
   side: 'buy' | 'sell',
   size: number,
-  newStopConfig: StopConfig,
-  symbol: string
+  stopConfig: StopConfig,
+  takeProfitConfig: TakeProfitConfig,
+  symbol: string,
+  isStopOrder: boolean = true // true for stop orders, false for take profit
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
-    // First place the new stop
-    const newStopResult = await placeOrder(side, size, newStopConfig, { type: 'none', price: 0 }, symbol, true)
-    if (!newStopResult.stopOrder?.sendStatus?.order_id) {
-      throw new Error('Failed to place new stop order')
+    // First place the new order
+    const result = await placeOrder(
+      side, 
+      size, 
+      isStopOrder ? stopConfig : { type: 'none', distance: 0 },
+      !isStopOrder ? takeProfitConfig : { type: 'none', price: 0 },
+      symbol,
+      true
+    )
+
+    const newOrder = isStopOrder ? result.stopOrder : result.takeProfitOrder
+    if (!newOrder?.sendStatus?.order_id) {
+      throw new Error(`Failed to place new ${isStopOrder ? 'stop' : 'take profit'} order`)
     }
 
-    // Verify the new stop is active
-    const newOrderId = newStopResult.stopOrder.sendStatus.order_id
-    const newStopVerified = await verifyOrder(newOrderId, 'placed', true)
-    if (!newStopVerified) {
-      throw new Error('Failed to verify new stop order')
+    // Verify the new order is active - both stop and take profit are trigger orders
+    const newOrderId = newOrder.sendStatus.order_id
+    const newOrderVerified = await verifyOrder(newOrderId, 'placed', true) // Always true for trigger orders
+    if (!newOrderVerified) {
+      throw new Error(`Failed to verify new ${isStopOrder ? 'stop' : 'take profit'} order`)
     }
 
-    // Now cancel the old stop
+    // Now cancel the old order
     const cancelResult = await cancelOrder(oldOrderId)
     if (cancelResult.result !== 'success') {
-      throw new Error('Failed to cancel old stop order')
+      throw new Error(`Failed to cancel old ${isStopOrder ? 'stop' : 'take profit'} order`)
     }
 
-    // Verify the old stop is cancelled
-    const oldStopCancelled = await verifyOrderCancelled(oldOrderId)
-    if (!oldStopCancelled) {
-      throw new Error('Failed to verify old stop order cancellation')
+    // Verify the old order is cancelled
+    const oldOrderCancelled = await verifyOrderCancelled(oldOrderId)
+    if (!oldOrderCancelled) {
+      throw new Error(`Failed to verify old ${isStopOrder ? 'stop' : 'take profit'} order cancellation`)
     }
 
     return { success: true, newOrderId }
   } catch (error) {
-    console.error('Error replacing stop order:', error)
+    console.error(`Error replacing ${isStopOrder ? 'stop' : 'take profit'} order:`, error)
     return { success: false, newOrderId: null }
   }
 }

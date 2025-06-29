@@ -4,7 +4,7 @@ import {
   getOpenPositions, 
   hasOpenPosition,
   cleanupPosition,
-  replaceStopOrder,
+  replaceOrder,
   getOrderStatus,
   cancelOrder
 } from '../kraken.js'
@@ -54,7 +54,7 @@ async function debugOrderStatus(orderId: string) {
   }
 }
 
-async function waitForOrderExecution(orderId: string, isStopOrder: boolean = false, maxAttempts = 10): Promise<boolean> {
+async function waitForOrderExecution(orderId: string, isTriggerOrder: boolean = false, maxAttempts = 10): Promise<boolean> {
   for (let i = 0; i < maxAttempts; i++) {
     try {
       console.log(`\nChecking order ${orderId} status (attempt ${i + 1}/${maxAttempts})...`)
@@ -63,9 +63,9 @@ async function waitForOrderExecution(orderId: string, isStopOrder: boolean = fal
       // Log full status object for debugging
       console.log('Full order status:', JSON.stringify(status, null, 2))
       
-      // For stop/tp orders, TRIGGER_PLACED is a success state
+      // For trigger orders (stops/take profits), TRIGGER_PLACED is a success state
       // For market orders, only FULLY_EXECUTED or FILLED is success
-      const validStates = isStopOrder 
+      const validStates = isTriggerOrder 
         ? ['FULLY_EXECUTED', 'FILLED', 'TRIGGER_PLACED'] 
         : ['FULLY_EXECUTED', 'FILLED']
       
@@ -372,47 +372,83 @@ const tests: TestCase[] = [
     }
   },
   {
-    name: 'Replace stop order',
+    name: 'Replace stop and take profit orders',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
-      const initialStopPrice = Math.round(currentPrice * 0.99 * 100) / 100  // 1% below, rounded to 2 decimals
-      const newStopPrice = Math.round(currentPrice * 0.98 * 100) / 100  // 2% below, rounded to 2 decimals
+      
+      // Initial order parameters
+      const initialStopPrice = Math.round(currentPrice * 0.99 * 100) / 100  // 1% below
+      const initialTpPrice = Math.round(currentPrice * 1.01 * 100) / 100    // 1% above
+      
+      // New order parameters
+      const newStopPrice = Math.round(currentPrice * 0.98 * 100) / 100     // 2% below
+      const newTpPrice = Math.round(currentPrice * 1.02 * 100) / 100       // 2% above
 
       console.log('Current price:', currentPrice)
-      console.log('Initial stop price:', initialStopPrice)
-      console.log('New stop price:', newStopPrice)
+      console.log('Initial stop/tp:', initialStopPrice, initialTpPrice)
+      console.log('New stop/tp:', newStopPrice, newTpPrice)
 
-      // Place initial position with stop
+      // Place initial position with both stop and take profit
       const initialResult = await placeOrder(
         'buy',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: initialStopPrice },
-        { type: 'none', price: 0 },
+        { type: 'limit', price: initialTpPrice },
         TEST_SYMBOL
       )
 
       if (!initialResult.stopOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place initial stop order')
       }
+      if (!initialResult.takeProfitOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place initial take profit order')
+      }
 
-      // Replace the stop
-      const replaceResult = await replaceStopOrder(
+      // Replace the stop order
+      console.log('\nReplacing stop order...')
+      const replaceStopResult = await replaceOrder(
         initialResult.stopOrder.sendStatus.order_id,
         'buy',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: newStopPrice },
-        TEST_SYMBOL
+        { type: 'none', price: 0 },
+        TEST_SYMBOL,
+        true // isStopOrder
       )
 
-      if (!replaceResult.success || !replaceResult.newOrderId) {
+      if (!replaceStopResult.success || !replaceStopResult.newOrderId) {
         throw new Error('Failed to replace stop order')
       }
 
       // Verify new stop
-      const newStopStatus = await getOrderStatus(replaceResult.newOrderId)
-      if (!newStopStatus.status.includes('TRIGGER_PLACED')) {
-        throw new Error(`Unexpected new stop status: ${newStopStatus.status}`)
+      console.log('Verifying new stop order...')
+      if (!await waitForOrderExecution(replaceStopResult.newOrderId, true)) {
+        throw new Error('Failed to verify new stop order')
       }
+      console.log('New stop order verified')
+
+      // Replace the take profit order
+      console.log('\nReplacing take profit order...')
+      const replaceTpResult = await replaceOrder(
+        initialResult.takeProfitOrder.sendStatus.order_id,
+        'buy',
+        TEST_SIZE,
+        { type: 'none', distance: 0 },
+        { type: 'limit', price: newTpPrice },
+        TEST_SYMBOL,
+        false // isStopOrder
+      )
+
+      if (!replaceTpResult.success || !replaceTpResult.newOrderId) {
+        throw new Error('Failed to replace take profit order')
+      }
+
+      // Verify new take profit
+      console.log('Verifying new take profit order...')
+      if (!await waitForOrderExecution(replaceTpResult.newOrderId, true)) { // Note: true because it's a trigger order
+        throw new Error('Failed to verify new take profit order')
+      }
+      console.log('New take profit order verified')
 
       // Clean up
       await cleanupPosition(TEST_SYMBOL)
