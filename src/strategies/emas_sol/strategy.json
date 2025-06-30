@@ -9,7 +9,7 @@
         "timeframe": 5
     },
     "indicators": {
-        "ema_fast": 20,
+        "ema_fast": 18,
         "ema_mid_1": 44,
         "ema_mid_2": 100,
         "ema_slow": 200
