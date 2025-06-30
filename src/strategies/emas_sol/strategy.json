@@ -1,0 +1,31 @@
+{
+    "name": "emas_sol",
+    "enabled": true,
+    "description": "EMA crossover strategy",
+    "cronSchedule": "*/5 * * * *",
+    "trading": {
+        "symbol": "PF_SOLUSD",
+        "position_size": 2,
+        "timeframe": 5
+    },
+    "indicators": {
+        "ema_fast": 20,
+        "ema_mid_1": 44,
+        "ema_mid_2": 100,
+        "ema_slow": 200
+    },
+    "risk_management": {
+        "take_profit": {
+            "enabled": true,
+            "percentage": 10.0
+        },
+        "stop_loss": {
+            "enabled": true,
+            "percentage": 1.0
+        },
+        "trailing_stop": {
+            "enabled": false,
+            "percentage": 10.0
+        }
+    }
+} 

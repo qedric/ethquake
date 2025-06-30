@@ -1,24 +1,29 @@
 import { getEMAs } from '../../trading/indicators.js'
 import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
-import { getDb } from '../../lib/mongodb.js'
+import { getDb, logActivity } from '../../lib/mongodb.js'
+import config from './strategy.json'
 
-// ——--- USER INPUTS ---——
-const EMA_FAST_LEN = 20
-const EMA_50_LEN = 44
-const EMA_100_LEN = 100
-const EMA_200_LEN = 200
+// Load configuration values
+const EMA_FAST_LEN = config.indicators.ema_fast
+const EMA_MID_1_LEN = config.indicators.ema_mid_1
+const EMA_MID_2_LEN = config.indicators.ema_mid_2
+const EMA_SLOW_LEN = config.indicators.ema_slow
 
-const USE_TP = true
-const TP_PCT = 7.0
-const USE_SL = false
-const SL_PCT = 16.0
-const USE_TR = true
-const TR_PCT = 10.0
+const USE_TP = config.risk_management.take_profit.enabled
+const TP_PCT = config.risk_management.take_profit.percentage
+const USE_SL = config.risk_management.stop_loss.enabled
+const SL_PCT = config.risk_management.stop_loss.percentage
+const USE_TR = config.risk_management.trailing_stop.enabled
+const TR_PCT = config.risk_management.trailing_stop.percentage
 
 // trading config
-const POSITION_SIZE = 0.01  // BTC
-const TRADING_PAIR = 'PF_XBTUSD'
-const TIMEFRAME = 60         // minutes
+const POSITION_SIZE = config.trading.position_size
+const TRADING_PAIR = config.trading.symbol
+const TIMEFRAME = config.trading.timeframe
+
+// Database config
+const DB_NAME = 'strategies'
+const COLLECTION_NAME = 'strategy_state'
 
 // State
 let currentPosition: 'long' | 'short' | null = null
@@ -28,41 +33,78 @@ let currentTakeProfitOrderId: string | null = null
 let trailingStop: number | null = null
 
 async function loadState() {
-  const db = await getDb('emas')
-  const st = await db.collection('strategy_state').findOne({})
+  const db = await getDb(DB_NAME)
+  const st = await db.collection(COLLECTION_NAME).findOne({ 
+    strategy: config.name,
+    symbol: TRADING_PAIR 
+  })
+  
   if (st) {
     currentPosition = st.currentPosition
     entryPrice = st.entryPrice
     currentStopOrderId = st.currentStopOrderId
     currentTakeProfitOrderId = st.currentTakeProfitOrderId
     trailingStop = st.trailingStop
-    if (currentPosition && ! await hasOpenPosition(TRADING_PAIR)) {
+    
+    // Verify position still exists
+    if (currentPosition && !await hasOpenPosition(TRADING_PAIR)) {
       currentPosition = null
       entryPrice = null
       currentStopOrderId = null
       currentTakeProfitOrderId = null
       trailingStop = null
+      await logActivity(DB_NAME, {
+        strategy: config.name,
+        symbol: TRADING_PAIR,
+        type: 'state_reset',
+        reason: 'position_not_found'
+      })
     }
   }
 }
 
 async function saveState() {
-  const db = await getDb('emas')
-  await db.collection('strategy_state')
-    .replaceOne({}, { 
-      currentPosition, 
-      entryPrice, 
-      currentStopOrderId,
-      currentTakeProfitOrderId, 
-      trailingStop 
-    }, { upsert: true })
+  const db = await getDb(DB_NAME)
+  await db.collection(COLLECTION_NAME).updateOne(
+    { 
+      strategy: config.name,
+      symbol: TRADING_PAIR 
+    },
+    { 
+      $set: {
+        strategy: config.name,
+        symbol: TRADING_PAIR,
+        currentPosition, 
+        entryPrice, 
+        currentStopOrderId,
+        currentTakeProfitOrderId, 
+        trailingStop,
+        lastUpdated: new Date()
+      } 
+    }, 
+    { upsert: true }
+  )
+  
+  // Log state change
+  await logActivity(DB_NAME, {
+    strategy: config.name,
+    symbol: TRADING_PAIR,
+    type: 'state_update',
+    state: {
+      currentPosition,
+      entryPrice,
+      hasStopOrder: !!currentStopOrderId,
+      hasTakeProfitOrder: !!currentTakeProfitOrderId,
+      hasTrailingStop: !!trailingStop
+    }
+  })
 }
 
 export async function runPipelineTask() {
   await loadState()
 
   // fetch latest EMAs
-  const candles = await getEMAs('BTCUSD', TIMEFRAME, [EMA_FAST_LEN, EMA_50_LEN, EMA_100_LEN, EMA_200_LEN], 2)
+  const candles = await getEMAs('BTCUSD', TIMEFRAME, [EMA_FAST_LEN, EMA_MID_1_LEN, EMA_MID_2_LEN, EMA_SLOW_LEN], 2)
   const prev = candles[candles.length - 2]
   const curr = candles[candles.length - 1]
 
