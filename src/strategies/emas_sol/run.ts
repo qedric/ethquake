@@ -1,7 +1,10 @@
 import { getEMAs } from '../../trading/indicators.js'
 import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
 import { getDb, logActivity } from '../../lib/mongodb.js'
-import config from './strategy.json'
+import { loadStrategyConfig } from '../../lib/loadConfig.js'
+
+// Load configuration values from strategy.json
+const config = loadStrategyConfig('strategies/emas_sol')
 
 // Load configuration values
 const EMA_FAST_LEN = config.indicators.ema_fast

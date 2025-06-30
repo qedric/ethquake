@@ -1,9 +1,11 @@
 import { getEMAs } from '../../trading/indicators.js'
 import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
 import { getDb, logActivity } from '../../lib/mongodb.js'
-import config from './strategy.json'
+import { loadStrategyConfig } from '../../lib/loadConfig.js'
 
 // Load configuration values from strategy.json
+const config = loadStrategyConfig('strategies/emas_btc')
+
 const EMA_FAST_LEN = config.indicators.ema_fast
 const EMA_MID_1_LEN = config.indicators.ema_mid_1
 const EMA_MID_2_LEN = config.indicators.ema_mid_2
