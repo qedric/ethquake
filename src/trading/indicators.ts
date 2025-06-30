@@ -74,21 +74,66 @@ export type CandleData = {
   [key: `ema${number}`]: number
 }
 
-//Fetches technical indicators from Kraken API and calculates EMAs
-export async function getEMAs(
-  pair: string = 'ETHUSD', 
-  interval: number = 15,
-  emaPeriods: number[] = [20, 50, 100],
-  lookbackCandles: number = 1 // Default to just current candle
-): Promise<CandleData[]> {
+// Helper to determine if a symbol is a futures instrument
+function isFuturesSymbol(symbol: string): boolean {
+  return symbol.startsWith('PF_')
+}
+
+// Convert minutes to futures API resolution string
+function minutesToResolution(minutes: number): string {
+  const validMinutes = [1, 5, 15, 30, 60, 240, 720, 1440, 10080]
+  const validResolutions = ['1m', '5m', '15m', '30m', '1h', '4h', '12h', '1d', '1w']
+  
+  const index = validMinutes.indexOf(minutes)
+  if (index !== -1) {
+    return validResolutions[index]
+  }
+  
+  // Find the closest valid resolution
+  const closest = validMinutes.reduce((prev, curr) => 
+    Math.abs(curr - minutes) < Math.abs(prev - minutes) ? curr : prev
+  )
+  console.warn(`Warning: ${minutes} minute interval not supported by Futures API. Using closest supported interval: ${closest} minutes`)
+  return minutesToResolution(closest)
+}
+
+async function getFuturesCandles(
+  symbol: string,
+  interval: number,
+  hoursNeeded: number
+): Promise<{ timestamp: number; price: number; high: number; low: number }[]> {
+  // Convert minutes to seconds for the API
+  const since = Math.floor(Date.now() / 1000) - hoursNeeded * 3600
+  
   try {
-    // Find the longest EMA period to determine data needs
-    const maxPeriod = Math.max(...emaPeriods)
+    // Use the correct futures API endpoint with proper resolution format
+    const resolution = minutesToResolution(interval)
+    const response = await axios.get(
+      `https://futures.kraken.com/api/charts/v1/trade/${symbol}/${resolution}?from=${since}`
+    )
     
-    // For max EMA period, we want at least 3x that amount of data points for accuracy
-    // Add lookbackCandles to ensure we have enough data for historical calculations
-    const minDataPoints = maxPeriod * 3
-    const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
+    if (!response.data || !response.data.candles) {
+      throw new Error('Unexpected response format from Kraken Futures API')
+    }
+
+    return response.data.candles.map((candle: any) => ({
+      timestamp: candle.time,
+      price: parseFloat(candle.close),
+      high: parseFloat(candle.high),
+      low: parseFloat(candle.low)
+    }))
+  } catch (error) {
+    console.error('Error fetching futures data:', error)
+    throw error
+  }
+}
+
+async function getSpotCandles(
+  pair: string,
+  interval: number,
+  hoursNeeded: number
+): Promise<{ timestamp: number; price: number; high: number; low: number }[]> {
+  try {
     const response = await axios.get(
       `https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${interval}&since=${Math.floor(Date.now() / 1000) - hoursNeeded * 3600}`
     )
@@ -97,7 +142,6 @@ export async function getEMAs(
       throw new Error(`Kraken API error: ${response.data.error.join(', ')}`)
     }
     
-    // Find the first property in the result object that's not "last"
     const pairData = Object.keys(response.data.result)
       .filter(key => key !== 'last')
       .map(key => response.data.result[key])[0]
@@ -106,29 +150,50 @@ export async function getEMAs(
       throw new Error('Unexpected response format from Kraken API')
     }
     
-    // Kraken returns data in format [time, open, high, low, close, vwap, volume, count]
-    const prices = pairData.map((candle: any) => parseFloat(candle[4])) // close prices
-    const highs = pairData.map((candle: any) => parseFloat(candle[2]))  // high prices
-    const lows = pairData.map((candle: any) => parseFloat(candle[3]))   // low prices
-    
-    if (!prices || prices.length < lookbackCandles + 1) {
+    return pairData.map((candle: any) => ({
+      timestamp: parseInt(candle[0]),
+      price: parseFloat(candle[4]),
+      high: parseFloat(candle[2]),
+      low: parseFloat(candle[3])
+    }))
+  } catch (error) {
+    console.error('Error fetching spot data:', error)
+    throw error
+  }
+}
+
+//Fetches technical indicators from Kraken API and calculates EMAs
+export async function getEMAs(
+  pair: string = 'ETHUSD',
+  interval: number = 15,
+  emaPeriods: number[] = [20, 50, 100],
+  lookbackCandles: number = 1
+): Promise<CandleData[]> {
+  try {
+    // Find the longest EMA period to determine data needs
+    const maxPeriod = Math.max(...emaPeriods)
+    const minDataPoints = maxPeriod * 3
+    const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
+
+    // Get candles based on instrument type
+    const candles = isFuturesSymbol(pair)
+      ? await getFuturesCandles(pair, interval, hoursNeeded)
+      : await getSpotCandles(pair, interval, hoursNeeded)
+
+    if (!candles || candles.length < lookbackCandles + 1) {
       throw new Error(`Failed to fetch enough price data. Need at least ${lookbackCandles + 1} candles`)
     }
 
-    // Need enough data for the longest period plus warmup for ALL lookback candles
-    if (prices.length < minDataPoints + lookbackCandles) {
-      throw new Error(`Not enough price data for reliable EMA calculations: got ${prices.length}, need at least ${minDataPoints + lookbackCandles}`)
+    if (candles.length < minDataPoints + lookbackCandles) {
+      throw new Error(`Not enough price data for reliable EMA calculations: got ${candles.length}, need at least ${minDataPoints + lookbackCandles}`)
     }
 
-    // We'll return this many recent candles (including current)
-    const recentPrices = prices.slice(-lookbackCandles)
-    const recentHighs = highs.slice(-lookbackCandles)
-    const recentLows = lows.slice(-lookbackCandles)
+    // Extract price arrays
+    const prices = candles.map(c => c.price)
+    const recentCandles = candles.slice(-lookbackCandles)
     
     // Calculate EMAs for each historical point
-    return recentPrices.map((price, idx) => {
-      // For each point, we need all previous data for EMA calculation
-      // We ensure we have minDataPoints worth of data before each point
+    return recentCandles.map((candle, idx) => {
       const dataEndIndex = prices.length - lookbackCandles + idx + 1
       const dataStartIndex = Math.max(0, dataEndIndex - minDataPoints)
       const pricesUpToThis = prices.slice(dataStartIndex, dataEndIndex)
@@ -139,11 +204,11 @@ export async function getEMAs(
       }, {} as Record<string, number>)
 
       return {
-        price,
-        high: recentHighs[idx],
-        low: recentLows[idx],
+        price: candle.price,
+        high: candle.high,
+        low: candle.low,
         ...emas,
-        timestamp: new Date(Date.now() - (lookbackCandles - 1 - idx) * interval * 60 * 1000)
+        timestamp: new Date(candle.timestamp * 1000)
       }
     })
   } catch (error) {
