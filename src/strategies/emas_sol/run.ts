@@ -141,7 +141,22 @@ export async function runPipelineTask() {
     if (!curr || !prev || !curr.price || 
         !curr.ema20 || !curr.ema50 || !curr.ema100 || !curr.ema200 ||
         !prev.ema20 || !prev.ema200) {
-      console.error(`[${config.name}] Missing required EMA data`)
+      console.error(`[${config.name}] Missing required EMA data:`, {
+        curr: curr ? {
+          timestamp: curr.timestamp,
+          price: curr.price,
+          ema20: curr.ema20,
+          ema50: curr.ema50,
+          ema100: curr.ema100,
+          ema200: curr.ema200
+        } : 'missing',
+        prev: prev ? {
+          timestamp: prev.timestamp,
+          price: prev.price,
+          ema20: prev.ema20,
+          ema200: prev.ema200
+        } : 'missing'
+      })
       return
     }
 
@@ -149,6 +164,15 @@ export async function runPipelineTask() {
     const ema50 = curr.ema50
     const ema100 = curr.ema100
     const ema200 = curr.ema200
+
+    // Log successful EMA calculation for debugging
+    console.log(`[${config.name}] EMAs calculated @ ${curr.price}:`, {
+      timestamp: curr.timestamp,
+      ema20: ema20.toFixed(2),
+      ema50: ema50.toFixed(2),
+      ema100: ema100.toFixed(2),
+      ema200: ema200.toFixed(2)
+    })
 
     // entry signals - exactly matching Pine script conditions
     const longSignal = ema20 > ema200 && ema20 > ema50 && ema20 > ema100
