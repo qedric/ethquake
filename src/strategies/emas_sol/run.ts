@@ -104,239 +104,269 @@ async function saveState() {
 }
 
 export async function runPipelineTask() {
-  await loadState()
+  try {
+    await loadState()
 
-  // Log initial state
-  await logActivity(DB_NAME, {
-    strategy: config.name,
-    symbol: TRADING_PAIR,
-    type: 'pipeline_start',
-    state: {
-      currentPosition,
-      entryPrice,
-      hasStopOrder: !!currentStopOrderId,
-      hasTakeProfitOrder: !!currentTakeProfitOrderId
+    // Log initial state
+    await logActivity(DB_NAME, {
+      strategy: config.name,
+      symbol: TRADING_PAIR,
+      type: 'pipeline_start',
+      state: {
+        currentPosition,
+        entryPrice,
+        hasStopOrder: !!currentStopOrderId,
+        hasTakeProfitOrder: !!currentTakeProfitOrderId
+      }
+    })
+
+    // fetch latest EMAs
+    let candles
+    try {
+      candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST_LEN, EMA_MID_1_LEN, EMA_MID_2_LEN, EMA_SLOW_LEN], 2)
+    } catch (err: any) {
+      console.log(`[${config.name}] Failed to get EMA data: ${err?.message || 'Unknown error'}`)
+      return
     }
-  })
 
-  // fetch latest EMAs
-  const candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST_LEN, EMA_MID_1_LEN, EMA_MID_2_LEN, EMA_SLOW_LEN], 2)
-  const prev = candles[candles.length - 2]
-  const curr = candles[candles.length - 1]
-
-  const ema20 = curr.ema20
-  const ema50 = curr.ema50
-  const ema100 = curr.ema100
-  const ema200 = curr.ema200
-
-  // Console log EMA values
-  console.log(`[${config.name}] EMAs @ ${curr.price}: 20=${ema20.toFixed(2)} 50=${ema50.toFixed(2)} 100=${ema100.toFixed(2)} 200=${ema200.toFixed(2)}`)
-
-  // Log EMA values to DB
-  await logActivity(DB_NAME, {
-    strategy: config.name,
-    symbol: TRADING_PAIR,
-    type: 'ema_values',
-    data: {
-      timestamp: curr.timestamp,
-      price: curr.price,
-      ema_values: {
-        ema20,
-        ema50,
-        ema100,
-        ema200
-      },
-      prev_ema20: prev.ema20,
-      prev_ema200: prev.ema200
+    if (!candles || candles.length < 2) {
+      console.log(`[${config.name}] Insufficient candle data returned`)
+      return
     }
-  })
 
-  // entry signals - exactly matching Pine script conditions
-  const longSignal = ema20 > ema200 && ema20 > ema50 && ema20 > ema100
-  const shortSignal = prev.ema20 >= prev.ema200 && curr.ema20 < curr.ema200 && ema20 < ema50 && ema20 < ema100
+    const prev = candles[candles.length - 2]
+    const curr = candles[candles.length - 1]
 
-  // Console log signal evaluation
-  console.log(`[${config.name}] Signals: LONG=${longSignal} SHORT=${shortSignal} Current=${currentPosition || 'none'}`)
+    // Check if we have all required data
+    if (!curr || !prev || !curr.price || 
+        !curr.ema20 || !curr.ema50 || !curr.ema100 || !curr.ema200 ||
+        !prev.ema20 || !prev.ema200) {
+      console.log(`[${config.name}] Skipping run - insufficient EMA data available`)
+      return
+    }
 
-  // Log signal evaluation to DB
-  await logActivity(DB_NAME, {
-    strategy: config.name,
-    symbol: TRADING_PAIR,
-    type: 'signal_evaluation',
-    data: {
-      timestamp: curr.timestamp,
-      longSignal,
-      shortSignal,
-      conditions: {
-        long: {
-          ema20_above_ema200: ema20 > ema200,
-          ema20_above_ema50: ema20 > ema50,
-          ema20_above_ema100: ema20 > ema100
+    const ema20 = curr.ema20
+    const ema50 = curr.ema50
+    const ema100 = curr.ema100
+    const ema200 = curr.ema200
+
+    // Console log EMA values
+    console.log(`[${config.name}] EMAs @ ${curr.price}: 20=${ema20.toFixed(2)} 50=${ema50.toFixed(2)} 100=${ema100.toFixed(2)} 200=${ema200.toFixed(2)}`)
+
+    // Log EMA values to DB
+    await logActivity(DB_NAME, {
+      strategy: config.name,
+      symbol: TRADING_PAIR,
+      type: 'ema_values',
+      data: {
+        timestamp: curr.timestamp,
+        price: curr.price,
+        ema_values: {
+          ema20,
+          ema50,
+          ema100,
+          ema200
         },
-        short: {
-          prev_ema20_above_ema200: prev.ema20 >= prev.ema200,
-          curr_ema20_below_ema200: curr.ema20 < curr.ema200,
-          ema20_below_ema50: ema20 < ema50,
-          ema20_below_ema100: ema20 < ema100
+        prev_ema20: prev.ema20,
+        prev_ema200: prev.ema200
+      }
+    })
+
+    // entry signals - exactly matching Pine script conditions
+    const longSignal = ema20 > ema200 && ema20 > ema50 && ema20 > ema100
+    const shortSignal = prev.ema20 >= prev.ema200 && curr.ema20 < curr.ema200 && ema20 < ema50 && ema20 < ema100
+
+    // Console log signal evaluation
+    console.log(`[${config.name}] Signals: LONG=${longSignal} SHORT=${shortSignal} Current=${currentPosition || 'none'}`)
+
+    // Log signal evaluation to DB
+    await logActivity(DB_NAME, {
+      strategy: config.name,
+      symbol: TRADING_PAIR,
+      type: 'signal_evaluation',
+      data: {
+        timestamp: curr.timestamp,
+        longSignal,
+        shortSignal,
+        conditions: {
+          long: {
+            ema20_above_ema200: ema20 > ema200,
+            ema20_above_ema50: ema20 > ema50,
+            ema20_above_ema100: ema20 > ema100
+          },
+          short: {
+            prev_ema20_above_ema200: prev.ema20 >= prev.ema200,
+            curr_ema20_below_ema200: curr.ema20 < curr.ema200,
+            ema20_below_ema50: ema20 < ema50,
+            ema20_below_ema100: ema20 < ema100
+          }
         }
       }
-    }
-  })
+    })
 
-  // compute exit prices
-  let reCalculateExit = false
-  let tpPriceLong: number | null = null
-  let tpPriceShort: number | null = null
-  let slPriceLong: number | null = null
-  let slPriceShort: number | null = null
-  let trOffset: number | null = null
+    // compute exit prices
+    let reCalculateExit = false
+    let tpPriceLong: number | null = null
+    let tpPriceShort: number | null = null
+    let slPriceLong: number | null = null
+    let slPriceShort: number | null = null
+    let trOffset: number | null = null
 
-  const inLong = currentPosition === 'long'
-  const inShort = currentPosition === 'short'
+    const inLong = currentPosition === 'long'
+    const inShort = currentPosition === 'short'
 
-  // compute exit prices
-  if (currentPosition && entryPrice !== null) {
-    reCalculateExit = (inLong && longSignal) || (inShort && shortSignal)
-    // If we get a signal in same direction as current position,
-    // recalculate exits from current price to give trade more room
-    const exitCalcPrice = reCalculateExit ? curr.price : entryPrice
-    
-    if (USE_TP) {
-      tpPriceLong = exitCalcPrice * (1 + TP_PCT / 100)
-      tpPriceShort = exitCalcPrice * (1 - TP_PCT / 100)
-    }
-    if (USE_SL) {
-      slPriceLong = exitCalcPrice * (1 - SL_PCT / 100)
-      slPriceShort = exitCalcPrice * (1 + SL_PCT / 100)
-    }
-    if (USE_TR) {
-      // Update trailing stop logic to match Pine script
-      trOffset = TR_PCT / 100 * curr.price
-      if (inLong) {
-        trailingStop = trailingStop === null 
-          ? curr.price - trOffset 
-          : Math.max(curr.high - trOffset, trailingStop)
-      } else if (inShort) {
-        trailingStop = trailingStop === null
-          ? curr.price + trOffset
-          : Math.min(curr.low + trOffset, trailingStop)
-      }
-    }
-
-    // If we're recalculating exits, we need to replace the existing orders
-    if (reCalculateExit) {
-      const side = currentPosition === 'long' ? 'buy' : 'sell'
-      console.log(`[${config.name}] Recalculating exits for ${currentPosition} position from ${curr.price}`)
+    // compute exit prices
+    if (currentPosition && entryPrice !== null) {
+      reCalculateExit = (inLong && longSignal) || (inShort && shortSignal)
+      // If we get a signal in same direction as current position,
+      // recalculate exits from current price to give trade more room
+      const exitCalcPrice = reCalculateExit ? curr.price : entryPrice
       
-      // Replace stop order if we have one
-      if (currentStopOrderId && (USE_TR || USE_SL)) {
+      if (USE_TP) {
+        tpPriceLong = exitCalcPrice * (1 + TP_PCT / 100)
+        tpPriceShort = exitCalcPrice * (1 - TP_PCT / 100)
+      }
+      if (USE_SL) {
+        slPriceLong = exitCalcPrice * (1 - SL_PCT / 100)
+        slPriceShort = exitCalcPrice * (1 + SL_PCT / 100)
+      }
+      if (USE_TR) {
+        // Update trailing stop logic to match Pine script
+        trOffset = TR_PCT / 100 * curr.price
+        if (inLong) {
+          trailingStop = trailingStop === null 
+            ? curr.price - trOffset 
+            : Math.max(curr.high - trOffset, trailingStop)
+        } else if (inShort) {
+          trailingStop = trailingStop === null
+            ? curr.price + trOffset
+            : Math.min(curr.low + trOffset, trailingStop)
+        }
+      }
+
+      // If we're recalculating exits, we need to replace the existing orders
+      if (reCalculateExit) {
+        const side = currentPosition === 'long' ? 'buy' : 'sell'
+        console.log(`[${config.name}] Recalculating exits for ${currentPosition} position from ${curr.price}`)
+        
+        // Replace stop order if we have one
+        if (currentStopOrderId && (USE_TR || USE_SL)) {
+          const stopConfig = USE_TR
+            ? { type: 'trailing' as const, distance: trOffset! }
+            : USE_SL
+              ? { type: 'fixed' as const, distance: 0, stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort! }
+              : { type: 'none' as const, distance: 0 }
+
+          const result = await replaceOrder(
+            currentStopOrderId,
+            side,
+            POSITION_SIZE,
+            stopConfig,
+            { type: 'none', price: 0 },
+            TRADING_PAIR,
+            true // isStopOrder
+          )
+          if (result.success && result.newOrderId) {
+            currentStopOrderId = result.newOrderId
+            await saveState()
+          }
+        }
+
+        // Replace take profit order if we have one
+        if (currentTakeProfitOrderId && USE_TP) {
+          const tpConfig = {
+            type: 'limit' as const,
+            price: currentPosition === 'long' ? tpPriceLong! : tpPriceShort!
+          }
+          
+          const result = await replaceOrder(
+            currentTakeProfitOrderId,
+            side,
+            POSITION_SIZE,
+            { type: 'none', distance: 0 },
+            tpConfig,
+            TRADING_PAIR,
+            false // isStopOrder
+          )
+          if (result.success && result.newOrderId) {
+            currentTakeProfitOrderId = result.newOrderId
+            await saveState()
+          }
+        }
+      }
+    } else {
+      trailingStop = null
+    }
+
+    // ENTRY logic - exactly matching Pine script conditions
+    if (longSignal) {
+      if (inShort) {
+        console.log(`[${config.name}] ACTION: Closing short position at ${curr.price}`)
+        await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
+        currentPosition = null
+        currentStopOrderId = null
+        currentTakeProfitOrderId = null
+        trailingStop = null
+      }
+      if (!inLong) {
+        console.log(`[${config.name}] ACTION: Opening long position at ${curr.price}`)
         const stopConfig = USE_TR
           ? { type: 'trailing' as const, distance: trOffset! }
           : USE_SL
-            ? { type: 'fixed' as const, distance: 0, stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort! }
+            ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceLong! }
             : { type: 'none' as const, distance: 0 }
 
-        const result = await replaceOrder(
-          currentStopOrderId,
-          side,
-          POSITION_SIZE,
-          stopConfig,
-          { type: 'none', price: 0 },
-          TRADING_PAIR,
-          true // isStopOrder
-        )
-        if (result.success && result.newOrderId) {
-          currentStopOrderId = result.newOrderId
-          await saveState()
-        }
-      }
+        const tpConfig = USE_TP && tpPriceLong !== null
+          ? { type: 'limit' as const, price: tpPriceLong }
+          : { type: 'none' as const, price: 0 }
 
-      // Replace take profit order if we have one
-      if (currentTakeProfitOrderId && USE_TP) {
-        const tpConfig = {
-          type: 'limit' as const,
-          price: currentPosition === 'long' ? tpPriceLong! : tpPriceShort!
-        }
-        
-        const result = await replaceOrder(
-          currentTakeProfitOrderId,
-          side,
-          POSITION_SIZE,
-          { type: 'none', distance: 0 },
-          tpConfig,
-          TRADING_PAIR,
-          false // isStopOrder
-        )
-        if (result.success && result.newOrderId) {
-          currentTakeProfitOrderId = result.newOrderId
-          await saveState()
-        }
+        const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
+        currentPosition = 'long'
+        entryPrice = curr.price
+        currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
+        currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
+        await saveState()
       }
     }
-  } else {
-    trailingStop = null
+
+    if (shortSignal) {
+      if (inLong) {
+        console.log(`[${config.name}] ACTION: Closing long position at ${curr.price}`)
+        await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
+        currentPosition = null
+        currentStopOrderId = null
+        currentTakeProfitOrderId = null
+        trailingStop = null
+      }
+      if (!inShort) {
+        console.log(`[${config.name}] ACTION: Opening short position at ${curr.price}`)
+        const stopConfig = USE_TR
+          ? { type: 'trailing' as const, distance: trOffset! }
+          : USE_SL
+            ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceShort! }
+            : { type: 'none' as const, distance: 0 }
+
+        const tpConfig = USE_TP && tpPriceShort !== null
+          ? { type: 'limit' as const, price: tpPriceShort }
+          : { type: 'none' as const, price: 0 }
+
+        const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
+        currentPosition = 'short'
+        entryPrice = curr.price
+        currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
+        currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
+        await saveState()
+      }
+    }
+
+    await saveState()
+  } catch (err: any) {
+    console.error(`[${config.name}] Pipeline error:`, err)
+    await logActivity(DB_NAME, {
+      strategy: config.name,
+      symbol: TRADING_PAIR,
+      type: 'error',
+      error: err?.message || 'Unknown error'
+    })
   }
-
-  // ENTRY logic - exactly matching Pine script conditions
-  if (longSignal) {
-    if (inShort) {
-      console.log(`[${config.name}] ACTION: Closing short position at ${curr.price}`)
-      await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
-      currentPosition = null
-      currentStopOrderId = null
-      currentTakeProfitOrderId = null
-      trailingStop = null
-    }
-    if (!inLong) {
-      console.log(`[${config.name}] ACTION: Opening long position at ${curr.price}`)
-      const stopConfig = USE_TR
-        ? { type: 'trailing' as const, distance: trOffset! }
-        : USE_SL
-          ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceLong! }
-          : { type: 'none' as const, distance: 0 }
-
-      const tpConfig = USE_TP && tpPriceLong !== null
-        ? { type: 'limit' as const, price: tpPriceLong }
-        : { type: 'none' as const, price: 0 }
-
-      const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
-      currentPosition = 'long'
-      entryPrice = curr.price
-      currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
-      currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
-      await saveState()
-    }
-  }
-
-  if (shortSignal) {
-    if (inLong) {
-      console.log(`[${config.name}] ACTION: Closing long position at ${curr.price}`)
-      await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
-      currentPosition = null
-      currentStopOrderId = null
-      currentTakeProfitOrderId = null
-      trailingStop = null
-    }
-    if (!inShort) {
-      console.log(`[${config.name}] ACTION: Opening short position at ${curr.price}`)
-      const stopConfig = USE_TR
-        ? { type: 'trailing' as const, distance: trOffset! }
-        : USE_SL
-          ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceShort! }
-          : { type: 'none' as const, distance: 0 }
-
-      const tpConfig = USE_TP && tpPriceShort !== null
-        ? { type: 'limit' as const, price: tpPriceShort }
-        : { type: 'none' as const, price: 0 }
-
-      const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
-      currentPosition = 'short'
-      entryPrice = curr.price
-      currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
-      currentTakeProfitOrderId = result.takeProfitOrder?.sendStatus?.order_id || null
-      await saveState()
-    }
-  }
-
-  await saveState()
 }

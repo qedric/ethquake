@@ -10,7 +10,7 @@ interface TestCase {
 
 // Test both spot and futures instruments
 const SPOT_PAIR = 'ETHUSD'
-const FUTURES_PAIR = 'PF_XBTUSD'
+const FUTURES_PAIR = 'PF_SOLUSD'
 
 const tests: TestCase[] = [
   {

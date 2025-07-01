@@ -35,12 +35,14 @@ function calculateSMA(prices: number[], period: number) {
  */
 function calculateEMA(prices: number[], period: number) {
   if (prices.length < period) {
+    console.log(`[EMA Calc] Insufficient data for ${period} EMA: got ${prices.length} points, need ${period}`)
     throw new Error(`Not enough price data to calculate ${period} EMA`)
   }
 
   // Need enough data for the period plus some warmup
   const minLength = period * 3
   if (prices.length < minLength) {
+    console.log(`[EMA Calc] Insufficient warmup data for ${period} EMA: got ${prices.length} points, need ${minLength}`)
     throw new Error(`For reliable ${period} EMA calculation, need at least ${minLength} data points, got ${prices.length}`)
   }
 
@@ -108,22 +110,33 @@ async function getFuturesCandles(
   try {
     // Use the correct futures API endpoint with proper resolution format
     const resolution = minutesToResolution(interval)
+    console.log(`[Futures API] Fetching ${symbol} candles. Resolution: ${resolution}, Hours needed: ${hoursNeeded}, Since: ${new Date(since * 1000).toISOString()}`)
+    
     const response = await axios.get(
       `https://futures.kraken.com/api/charts/v1/trade/${symbol}/${resolution}?from=${since}`
     )
     
     if (!response.data || !response.data.candles) {
+      console.log(`[Futures API] Unexpected response:`, JSON.stringify(response.data, null, 2))
       throw new Error('Unexpected response format from Kraken Futures API')
     }
 
-    return response.data.candles.map((candle: any) => ({
+    const candles = response.data.candles
+    console.log(`[Futures API] Got ${candles.length} candles from ${new Date(candles[0]?.time * 1000).toISOString()} to ${new Date(candles[candles.length-1]?.time * 1000).toISOString()}`)
+    
+    return candles.map((candle: any) => ({
       timestamp: candle.time,
       price: parseFloat(candle.close),
       high: parseFloat(candle.high),
       low: parseFloat(candle.low)
     }))
-  } catch (error) {
-    console.error('Error fetching futures data:', error)
+  } catch (error: any) {
+    console.error('[Futures API] Error details:', {
+      message: error?.message,
+      response: error?.response?.data,
+      status: error?.response?.status,
+      headers: error?.response?.headers
+    })
     throw error
   }
 }
@@ -175,25 +188,34 @@ export async function getEMAs(
     const minDataPoints = maxPeriod * 3
     const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
 
+    console.log(`[EMA Setup] Calculating EMAs for ${pair}:`)
+    console.log(`[EMA Setup] Periods: ${emaPeriods.join(', ')}`)
+    console.log(`[EMA Setup] Max period: ${maxPeriod}, Min data points: ${minDataPoints}`)
+    console.log(`[EMA Setup] Hours needed: ${hoursNeeded} for ${interval}m candles`)
+
     // Get candles based on instrument type
     const candles = isFuturesSymbol(pair)
       ? await getFuturesCandles(pair, interval, hoursNeeded)
       : await getSpotCandles(pair, interval, hoursNeeded)
 
     if (!candles || candles.length < lookbackCandles + 1) {
+      console.log(`[EMA Data] Got ${candles?.length || 0} candles, need at least ${lookbackCandles + 1}`)
       throw new Error(`Failed to fetch enough price data. Need at least ${lookbackCandles + 1} candles`)
     }
 
     if (candles.length < minDataPoints + lookbackCandles) {
+      console.log(`[EMA Data] Got ${candles.length} candles, need ${minDataPoints + lookbackCandles} for calculation`)
       throw new Error(`Not enough price data for reliable EMA calculations: got ${candles.length}, need at least ${minDataPoints + lookbackCandles}`)
     }
+
+    console.log(`[EMA Data] Successfully fetched ${candles.length} candles`)
 
     // Extract price arrays
     const prices = candles.map(c => c.price)
     const recentCandles = candles.slice(-lookbackCandles)
     
     // Calculate EMAs for each historical point
-    return recentCandles.map((candle, idx) => {
+    const result = recentCandles.map((candle, idx) => {
       const dataEndIndex = prices.length - lookbackCandles + idx + 1
       const dataStartIndex = Math.max(0, dataEndIndex - minDataPoints)
       const pricesUpToThis = prices.slice(dataStartIndex, dataEndIndex)
@@ -211,8 +233,24 @@ export async function getEMAs(
         timestamp: new Date(candle.timestamp * 1000)
       }
     })
-  } catch (error) {
-    console.error('Error fetching indicators:', error)
+
+    console.log(`[EMA Result] Successfully calculated EMAs for ${result.length} candles`)
+    const latestCandle = result[result.length - 1] as CandleData
+    console.log(`[EMA Result] Latest values:`, {
+      price: latestCandle.price,
+      emas: emaPeriods.reduce((acc, period) => {
+        acc[`ema${period}`] = latestCandle[`ema${period}`]
+        return acc
+      }, {} as Record<string, number>)
+    })
+
+    return result
+  } catch (error: any) {
+    console.error('[EMA Error] Failed to calculate EMAs:', {
+      message: error?.message,
+      type: error?.constructor.name,
+      stack: error?.stack
+    })
     throw error
   }
 } 
