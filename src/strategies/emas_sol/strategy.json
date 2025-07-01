@@ -2,7 +2,7 @@
     "name": "emas_sol",
     "enabled": true,
     "description": "EMA crossover strategy",
-    "cronSchedule": "*/5 * * * *",
+    "cronSchedule": "15 */4 * * * *",
     "trading": {
         "symbol": "PF_SOLUSD",
         "position_size": 2,
