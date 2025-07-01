@@ -139,44 +139,47 @@ export async function runPipelineTask() {
 
     // Check if we have all required data
     if (!curr || !prev || !curr.price || 
-        !curr.ema20 || !curr.ema50 || !curr.ema100 || !curr.ema200 ||
-        !prev.ema20 || !prev.ema200) {
+        !curr[`ema${EMA_FAST_LEN}`] || !curr[`ema${EMA_MID_1_LEN}`] || 
+        !curr[`ema${EMA_MID_2_LEN}`] || !curr[`ema${EMA_SLOW_LEN}`] ||
+        !prev[`ema${EMA_FAST_LEN}`] || !prev[`ema${EMA_SLOW_LEN}`]) {
       console.error(`[${config.name}] Missing required EMA data:`, {
         curr: curr ? {
           timestamp: curr.timestamp,
           price: curr.price,
-          ema20: curr.ema20,
-          ema50: curr.ema50,
-          ema100: curr.ema100,
-          ema200: curr.ema200
+          [`ema${EMA_FAST_LEN}`]: curr[`ema${EMA_FAST_LEN}`],
+          [`ema${EMA_MID_1_LEN}`]: curr[`ema${EMA_MID_1_LEN}`],
+          [`ema${EMA_MID_2_LEN}`]: curr[`ema${EMA_MID_2_LEN}`],
+          [`ema${EMA_SLOW_LEN}`]: curr[`ema${EMA_SLOW_LEN}`]
         } : 'missing',
         prev: prev ? {
           timestamp: prev.timestamp,
           price: prev.price,
-          ema20: prev.ema20,
-          ema200: prev.ema200
+          [`ema${EMA_FAST_LEN}`]: prev[`ema${EMA_FAST_LEN}`],
+          [`ema${EMA_SLOW_LEN}`]: prev[`ema${EMA_SLOW_LEN}`]
         } : 'missing'
       })
       return
     }
 
-    const ema20 = curr.ema20
-    const ema50 = curr.ema50
-    const ema100 = curr.ema100
-    const ema200 = curr.ema200
+    const emaFast = curr[`ema${EMA_FAST_LEN}`]
+    const emaMid1 = curr[`ema${EMA_MID_1_LEN}`]
+    const emaMid2 = curr[`ema${EMA_MID_2_LEN}`]
+    const emaSlow = curr[`ema${EMA_SLOW_LEN}`]
 
     // Log successful EMA calculation for debugging
     console.log(`[${config.name}] EMAs calculated @ ${curr.price}:`, {
       timestamp: curr.timestamp,
-      ema20: ema20.toFixed(2),
-      ema50: ema50.toFixed(2),
-      ema100: ema100.toFixed(2),
-      ema200: ema200.toFixed(2)
+      [`ema${EMA_FAST_LEN}`]: emaFast.toFixed(2),
+      [`ema${EMA_MID_1_LEN}`]: emaMid1.toFixed(2),
+      [`ema${EMA_MID_2_LEN}`]: emaMid2.toFixed(2),
+      [`ema${EMA_SLOW_LEN}`]: emaSlow.toFixed(2)
     })
 
     // entry signals - exactly matching Pine script conditions
-    const longSignal = ema20 > ema200 && ema20 > ema50 && ema20 > ema100
-    const shortSignal = prev.ema20 >= prev.ema200 && curr.ema20 < curr.ema200 && ema20 < ema50 && ema20 < ema100
+    const longSignal = emaFast > emaSlow && emaFast > emaMid1 && emaFast > emaMid2
+    const shortSignal = prev[`ema${EMA_FAST_LEN}`] >= prev[`ema${EMA_SLOW_LEN}`] && 
+                       curr[`ema${EMA_FAST_LEN}`] < curr[`ema${EMA_SLOW_LEN}`] && 
+                       emaFast < emaMid1 && emaFast < emaMid2
 
     // Log signal evaluation to DB
     await logActivity(DB_NAME, {
@@ -190,15 +193,15 @@ export async function runPipelineTask() {
         shortSignal,
         conditions: {
           long: {
-            ema20_above_ema200: ema20 > ema200,
-            ema20_above_ema50: ema20 > ema50,
-            ema20_above_ema100: ema20 > ema100
+            ema_fast_above_slow: emaFast > emaSlow,
+            ema_fast_above_mid1: emaFast > emaMid1,
+            ema_fast_above_mid2: emaFast > emaMid2
           },
           short: {
-            prev_ema20_above_ema200: prev.ema20 >= prev.ema200,
-            curr_ema20_below_ema200: curr.ema20 < curr.ema200,
-            ema20_below_ema50: ema20 < ema50,
-            ema20_below_ema100: ema20 < ema100
+            prev_ema_fast_above_slow: prev[`ema${EMA_FAST_LEN}`] >= prev[`ema${EMA_SLOW_LEN}`],
+            curr_ema_fast_below_slow: curr[`ema${EMA_FAST_LEN}`] < curr[`ema${EMA_SLOW_LEN}`],
+            ema_fast_below_mid1: emaFast < emaMid1,
+            ema_fast_below_mid2: emaFast < emaMid2
           }
         }
       }
