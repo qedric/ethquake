@@ -193,24 +193,49 @@ export async function replaceOrder(
   isStopOrder: boolean = true // true for stop orders, false for take profit
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
-    // First place the new order
-    const result = await placeOrder(
-      side, 
-      size, 
-      isStopOrder ? stopConfig : { type: 'none', distance: 0 },
-      !isStopOrder ? takeProfitConfig : { type: 'none', price: 0 },
-      symbol,
-      true
-    )
+    // Create the appropriate order data based on type
+    const orderData = isStopOrder && stopConfig.type === 'trailing' ? {
+      orderType: 'trailing_stop',
+      symbol: symbol,
+      side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
+      size: size,
+      trailingStopDeviationUnit: 'PERCENT',
+      trailingStopMaxDeviation: stopConfig.distance,
+      reduceOnly: true,
+      triggerSignal: 'mark'
+    } : isStopOrder && stopConfig.type === 'fixed' ? {
+      orderType: 'stp',
+      symbol: symbol,
+      side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
+      size: size,
+      stopPrice: roundPrice((stopConfig as FixedStopConfig).stopPrice),
+      reduceOnly: true,
+      triggerSignal: 'mark'
+    } : !isStopOrder && takeProfitConfig.type === 'limit' ? {
+      orderType: 'take_profit',
+      symbol: symbol,
+      side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
+      size: size,
+      stopPrice: roundPrice(takeProfitConfig.price),
+      reduceOnly: true,
+      triggerSignal: 'mark'
+    } : null
 
-    const newOrder = isStopOrder ? result.stopOrder : result.takeProfitOrder
-    if (!newOrder?.sendStatus?.order_id) {
+    if (!orderData) {
+      throw new Error('Invalid order configuration')
+    }
+
+    // Place the new order directly
+    const result = await sendOrder(orderData)
+    console.log('New order result:', result.data)
+
+    if (result.data.result !== 'success' || !result.data.sendStatus?.order_id) {
       throw new Error(`Failed to place new ${isStopOrder ? 'stop' : 'take profit'} order`)
     }
 
-    // Verify the new order is active - both stop and take profit are trigger orders
-    const newOrderId = newOrder.sendStatus.order_id
-    const newOrderVerified = await verifyOrder(newOrderId, 'placed', true) // Always true for trigger orders
+    // Verify the new order is active
+    const newOrderId = result.data.sendStatus.order_id
+    const newOrderVerified = await verifyOrder(newOrderId, 'placed', true)
     if (!newOrderVerified) {
       throw new Error(`Failed to verify new ${isStopOrder ? 'stop' : 'take profit'} order`)
     }
