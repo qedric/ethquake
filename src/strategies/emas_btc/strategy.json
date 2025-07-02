@@ -25,7 +25,7 @@
         },
         "trailing_stop": {
             "enabled": true,
-            "percentage": 10.0
+            "percentage": 7.0
         }
     }
 } 
