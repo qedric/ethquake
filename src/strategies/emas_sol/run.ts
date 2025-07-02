@@ -322,6 +322,10 @@ export async function runPipelineTask() {
       }
       if (!inLong) {
         console.log(`[${config.name}] Opening long position at ${curr.price}`)
+        const trOffset = USE_TR ? TR_PCT / 100 * curr.price : null
+        const slPriceLong = USE_SL ? curr.price * (1 - SL_PCT / 100) : null
+        const tpPriceLong = USE_TP ? curr.price * (1 + TP_PCT / 100) : null
+
         const stopConfig = USE_TR
           ? { type: 'trailing' as const, distance: trOffset! }
           : USE_SL
@@ -352,6 +356,10 @@ export async function runPipelineTask() {
       }
       if (!inShort) {
         console.log(`[${config.name}] Opening short position at ${curr.price}`)
+        const trOffset = USE_TR ? TR_PCT / 100 * curr.price : null
+        const slPriceShort = USE_SL ? curr.price * (1 + SL_PCT / 100) : null
+        const tpPriceShort = USE_TP ? curr.price * (1 - TP_PCT / 100) : null
+
         const stopConfig = USE_TR
           ? { type: 'trailing' as const, distance: trOffset! }
           : USE_SL
