@@ -16,12 +16,12 @@
     },
     "risk_management": {
         "take_profit": {
-            "enabled": true,
+            "enabled": false,
             "percentage": 10.0
         },
         "stop_loss": {
             "enabled": true,
-            "percentage": 1.0
+            "percentage": 3.0
         },
         "trailing_stop": {
             "enabled": false,
