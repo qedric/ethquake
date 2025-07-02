@@ -48,9 +48,18 @@ async function loadState() {
     currentStopOrderId = st.currentStopOrderId
     currentTakeProfitOrderId = st.currentTakeProfitOrderId
     trailingStop = st.trailingStop
+
+    console.log(`[${config.name}] State loaded:`, {
+      currentPosition,
+      entryPrice,
+      currentStopOrderId,
+      currentTakeProfitOrderId,
+      trailingStop
+    })
     
     // Verify position still exists
     if (currentPosition && !await hasOpenPosition(TRADING_PAIR)) {
+      console.error(`[${config.name}] State reset: position not found`)
       currentPosition = null
       entryPrice = null
       currentStopOrderId = null
