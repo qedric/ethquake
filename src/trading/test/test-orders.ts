@@ -207,9 +207,9 @@ const tests: TestCase[] = [
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
       console.log('Current price:', currentPrice)
       
-      // Calculate stop loss and take profit prices with proper rounding
-      const stopLossPrice = Math.round(currentPrice * 0.98 * 100) / 100  // 2% below, rounded to 2 decimals
-      const takeProfitPrice = Math.round(currentPrice * 1.02 * 100) / 100  // 2% above, rounded to 2 decimals
+      // Calculate stop loss and take profit prices
+      const stopLossPrice = currentPrice * 0.98  // 2% below
+      const takeProfitPrice = currentPrice * 1.02  // 2% above
       
       console.log('Stop loss price:', stopLossPrice)
       console.log('Take profit price:', takeProfitPrice)
@@ -282,8 +282,8 @@ const tests: TestCase[] = [
     name: 'Short position with fixed stop loss and take profit',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
-      const stopPrice = Math.round(currentPrice * 1.02 * 100) / 100  // 2% above, rounded to 2 decimals
-      const takeProfitPrice = Math.round(currentPrice * 0.98 * 100) / 100  // 2% below, rounded to 2 decimals
+      const stopPrice = currentPrice * 1.02  // 2% above
+      const takeProfitPrice = currentPrice * 0.98  // 2% below
 
       console.log('Current price:', currentPrice)
       console.log('Stop loss price:', stopPrice)
@@ -377,12 +377,12 @@ const tests: TestCase[] = [
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
       
       // Initial order parameters
-      const initialStopPrice = Math.round(currentPrice * 0.99 * 100) / 100  // 1% below
-      const initialTpPrice = Math.round(currentPrice * 1.01 * 100) / 100    // 1% above
+      const initialStopPrice = currentPrice * 0.99  // 1% below
+      const initialTpPrice = currentPrice * 1.01    // 1% above
       
       // New order parameters
-      const newStopPrice = Math.round(currentPrice * 0.98 * 100) / 100     // 2% below
-      const newTpPrice = Math.round(currentPrice * 1.02 * 100) / 100       // 2% above
+      const newStopPrice = currentPrice * 0.98     // 2% below
+      const newTpPrice = currentPrice * 1.02       // 2% above
 
       console.log('Current price:', currentPrice)
       console.log('Initial stop/tp:', initialStopPrice, initialTpPrice)
@@ -481,7 +481,7 @@ const tests: TestCase[] = [
     name: 'Order cancellation',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
-      const farStopPrice = Math.round(currentPrice * 0.95 * 100) / 100  // 5% below, rounded to 2 decimals
+      const farStopPrice = currentPrice * 0.95  // 5% below
 
       console.log('Current price:', currentPrice)
       console.log('Far stop price:', farStopPrice)

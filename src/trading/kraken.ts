@@ -92,6 +92,11 @@ interface LimitTakeProfitConfig extends BaseTakeProfitConfig {
 
 type TakeProfitConfig = NoTakeProfitConfig | LimitTakeProfitConfig
 
+// Add this helper function before the placeOrder function
+function roundPrice(price: number): number {
+  return Math.round(price * 100) / 100 // Round to 2 decimal places
+}
+
 /**
  * Gets the current price for a symbol
  */
@@ -302,7 +307,7 @@ export async function placeOrder(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: size,
-      stopPrice: stopConfig.stopPrice,
+      stopPrice: roundPrice(stopConfig.stopPrice),
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
       triggerSignal: 'mark'
     } : null
@@ -313,7 +318,7 @@ export async function placeOrder(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: size,
-      stopPrice: takeProfitConfig.price,
+      stopPrice: roundPrice(takeProfitConfig.price),
       reduceOnly: true,  // Always true for take profit orders to prevent position stacking
       triggerSignal: 'mark'
     } : null
