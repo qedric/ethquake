@@ -222,7 +222,6 @@ export async function runPipelineTask() {
     let tpPriceShort: number | null = null
     let slPriceLong: number | null = null
     let slPriceShort: number | null = null
-    let trOffset: number | null = null
 
     const inLong = currentPosition === 'long'
     const inShort = currentPosition === 'short'
@@ -244,7 +243,6 @@ export async function runPipelineTask() {
       }
       if (USE_TR) {
         // Update trailing stop to use percentage directly
-        trOffset = TR_PCT
         if (inLong) {
           trailingStop = trailingStop === null 
             ? curr.price * (1 - TR_PCT / 100)
@@ -322,7 +320,6 @@ export async function runPipelineTask() {
       }
       if (!inLong) {
         console.log(`[${config.name}] Opening long position at ${curr.price}`)
-        const trOffset = USE_TR ? TR_PCT : null
         const slPriceLong = USE_SL ? curr.price * (1 - SL_PCT / 100) : null
         const tpPriceLong = USE_TP ? curr.price * (1 + TP_PCT / 100) : null
 
@@ -356,7 +353,6 @@ export async function runPipelineTask() {
       }
       if (!inShort) {
         console.log(`[${config.name}] Opening short position at ${curr.price}`)
-        const trOffset = USE_TR ? TR_PCT : null
         const slPriceShort = USE_SL ? curr.price * (1 + SL_PCT / 100) : null
         const tpPriceShort = USE_TP ? curr.price * (1 - TP_PCT / 100) : null
 
