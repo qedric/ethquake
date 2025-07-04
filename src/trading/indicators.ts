@@ -189,7 +189,8 @@ export async function getEMAs(
   try {
     // Find the longest EMA period to determine data needs
     const maxPeriod = Math.max(...emaPeriods)
-    const minDataPoints = maxPeriod * 3
+    const multiplier = maxPeriod <= 100 ? 3 : 1.5
+    const minDataPoints = Math.ceil(maxPeriod * multiplier)
     const hoursNeeded = Math.ceil((minDataPoints + lookbackCandles) * interval / 60)
 
     // Get candles based on instrument type
