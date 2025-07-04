@@ -108,6 +108,19 @@ async function saveState() {
 export async function runPipelineTask() {
   await loadState()
 
+  // Log initial state
+  await logActivity(DB_NAME, {
+    strategy: config.name,
+    symbol: TRADING_PAIR,
+    type: 'pipeline_start',
+    state: {
+      currentPosition,
+      entryPrice,
+      hasStopOrder: !!currentStopOrderId,
+      hasTakeProfitOrder: !!currentTakeProfitOrderId
+    }
+  })
+
   // fetch latest EMAs
   const candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST, EMA_MID_1, EMA_MID_2, EMA_SLOW], 2)
   const prev = candles[candles.length - 2]
@@ -120,12 +133,52 @@ export async function runPipelineTask() {
 
   // fetch latest sentiment reading (longterm EMA)
   const emaSentiment = USE_SENTIMENT ? await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_SENTIMENT], 1) : null
+
+  // Log successful EMA calculation for debugging
+  console.log(`[${config.name}] EMAs calculated @ ${curr.price}:`, {
+    timestamp: curr.timestamp,
+    [`ema${EMA_FAST}`]: emaFast.toFixed(2),
+    [`ema${EMA_MID_1}`]: emaMid1.toFixed(2),
+    [`ema${EMA_MID_2}`]: emaMid2.toFixed(2),
+    [`ema${EMA_SLOW}`]: emaSlow.toFixed(2),
+    [`ema${EMA_SENTIMENT}`]: emaSentiment ? emaSentiment[0][`ema${EMA_SENTIMENT}`].toFixed(2) : 'N/A'
+  })
+
+
   const sentimentIsLong = emaSentiment ? curr.price > emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
   const sentimentIsShort = emaSentiment ? curr.price < emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
   
   // entry signals - exactly matching Pine script conditions
   const longSignal = sentimentIsLong && emaFast > emaSlow && emaFast > emaMid1 && emaFast > emaMid2
   const shortSignal = sentimentIsShort && prev[`ema${EMA_FAST}`] >= prev[`ema${EMA_SLOW}`] && curr[`ema${EMA_FAST}`] < curr[`ema${EMA_SLOW}`] && emaFast < emaMid1 && emaFast < emaMid2
+
+  // Log signal evaluation to DB
+  await logActivity(DB_NAME, {
+    strategy: config.name,
+    symbol: TRADING_PAIR,
+    type: 'signal_evaluation',
+    data: {
+      timestamp: curr.timestamp,
+      price: curr.price,
+      longSignal,
+      shortSignal,
+      conditions: {
+        long: {
+          sentiment_is_long: sentimentIsLong,
+          ema_fast_above_slow: emaFast > emaSlow,
+          ema_fast_above_mid1: emaFast > emaMid1,
+          ema_fast_above_mid2: emaFast > emaMid2
+        },
+        short: {
+          sentiment_is_short: sentimentIsShort,
+          prev_ema_fast_above_slow: prev[`ema${EMA_FAST}`] >= prev[`ema${EMA_SLOW}`],
+          curr_ema_fast_below_slow: curr[`ema${EMA_FAST}`] < curr[`ema${EMA_SLOW}`],
+          ema_fast_below_mid1: emaFast < emaMid1,
+          ema_fast_below_mid2: emaFast < emaMid2
+        }
+      }
+    }
+  })
 
   // compute exit prices
   let reCalculateExit = false
@@ -170,6 +223,8 @@ export async function runPipelineTask() {
     // If we're recalculating exits, we need to replace the existing orders
     if (reCalculateExit) {
       const side = currentPosition === 'long' ? 'buy' : 'sell'
+
+      console.log(`[${config.name}] Updating exits for ${currentPosition} position at ${curr.price}`)
       
       // Replace stop order if we have one
       if (currentStopOrderId && (USE_TR || USE_SL)) {
@@ -223,6 +278,7 @@ export async function runPipelineTask() {
   // ENTRY logic - exactly matching Pine script conditions
   if (longSignal) {
     if (inShort) {
+      console.log(`[${config.name}] Closing short position at ${curr.price}`)
       await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
       currentPosition = null
       currentStopOrderId = null
@@ -230,6 +286,7 @@ export async function runPipelineTask() {
       trailingStop = null
     }
     if (!inLong) {
+      console.log(`[${config.name}] Opening long position at ${curr.price}`)
       const stopConfig = USE_TR
         ? { type: 'trailing' as const, distance: trOffset! }
         : USE_SL
@@ -251,6 +308,7 @@ export async function runPipelineTask() {
 
   if (shortSignal) {
     if (inLong) {
+      console.log(`[${config.name}] Closing long position at ${curr.price}`)
       await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
       currentPosition = null
       currentStopOrderId = null
@@ -258,6 +316,7 @@ export async function runPipelineTask() {
       trailingStop = null
     }
     if (!inShort) {
+      console.log(`[${config.name}] Opening short position at ${curr.price}`)
       const stopConfig = USE_TR
         ? { type: 'trailing' as const, distance: trOffset! }
         : USE_SL
