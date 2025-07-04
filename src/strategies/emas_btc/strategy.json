@@ -2,21 +2,25 @@
     "name": "emas_btc",
     "enabled": false,
     "description": "EMA crossover strategy for BTC",
-    "cronSchedule": "0 * * * *",
+    "cronSchedule": "2 * * * *",
     "trading": {
         "symbol": "PF_XBTUSD",
-        "position_size": 0.01,
+        "position_size": 0.005,
         "timeframe": 60
     },
     "indicators": {
-        "ema_fast": 20,
+        "ema_fast": 18,
         "ema_mid_1": 44,
         "ema_mid_2": 100,
-        "ema_slow": 200
+        "ema_slow": 200,
+        "ema_sentiment": {
+            "enabled": true,
+            "length": 800
+        }
     },
     "risk_management": {
         "take_profit": {
-            "enabled": true,
+            "enabled": false,
             "percentage": 7.0
         },
         "stop_loss": {
@@ -25,7 +29,7 @@
         },
         "trailing_stop": {
             "enabled": true,
-            "percentage": 7.0
+            "percentage": 4.0
         }
     }
 } 

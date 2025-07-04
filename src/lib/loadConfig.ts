@@ -17,6 +17,10 @@ export interface StrategyConfig {
         ema_mid_1: number
         ema_mid_2: number
         ema_slow: number
+        ema_sentiment?: {
+            enabled: boolean
+            length: number
+        }
     }
     risk_management: {
         take_profit: {

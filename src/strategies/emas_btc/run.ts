@@ -6,10 +6,13 @@ import { loadStrategyConfig } from '../../lib/loadConfig.js'
 // Load configuration values from strategy.json
 const config = loadStrategyConfig('strategies/emas_btc')
 
-const EMA_FAST_LEN = config.indicators.ema_fast
-const EMA_MID_1_LEN = config.indicators.ema_mid_1
-const EMA_MID_2_LEN = config.indicators.ema_mid_2
-const EMA_SLOW_LEN = config.indicators.ema_slow
+const EMA_FAST = config.indicators.ema_fast
+const EMA_MID_1 = config.indicators.ema_mid_1
+const EMA_MID_2 = config.indicators.ema_mid_2
+const EMA_SLOW = config.indicators.ema_slow
+
+const USE_SENTIMENT = config.indicators.ema_sentiment?.enabled ?? false
+const EMA_SENTIMENT = config.indicators.ema_sentiment?.length ?? 800
 
 const USE_TP = config.risk_management.take_profit.enabled
 const TP_PCT = config.risk_management.take_profit.percentage
@@ -106,18 +109,23 @@ export async function runPipelineTask() {
   await loadState()
 
   // fetch latest EMAs
-  const candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST_LEN, EMA_MID_1_LEN, EMA_MID_2_LEN, EMA_SLOW_LEN], 2)
+  const candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST, EMA_MID_1, EMA_MID_2, EMA_SLOW], 2)
   const prev = candles[candles.length - 2]
   const curr = candles[candles.length - 1]
 
-  const ema20 = curr.ema20
-  const ema50 = curr.ema50
-  const ema100 = curr.ema100
-  const ema200 = curr.ema200
+  const emaFast = curr[`ema${EMA_FAST}`]
+  const emaMid1 = curr[`ema${EMA_MID_1}`]
+  const emaMid2 = curr[`ema${EMA_MID_2}`]
+  const emaSlow = curr[`ema${EMA_SLOW}`]
 
+  // fetch latest sentiment reading (longterm EMA)
+  const emaSentiment = USE_SENTIMENT ? await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_SENTIMENT], 1) : null
+  const sentimentIsLong = emaSentiment ? curr.price > emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
+  const sentimentIsShort = emaSentiment ? curr.price < emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
+  
   // entry signals - exactly matching Pine script conditions
-  const longSignal = ema20 > ema200 && ema20 > ema50 && ema20 > ema100
-  const shortSignal = prev.ema20 >= prev.ema200 && curr.ema20 < curr.ema200 && ema20 < ema50 && ema20 < ema100
+  const longSignal = sentimentIsLong && emaFast > emaSlow && emaFast > emaMid1 && emaFast > emaMid2
+  const shortSignal = sentimentIsShort && prev[`ema${EMA_FAST}`] >= prev[`ema${EMA_SLOW}`] && curr[`ema${EMA_FAST}`] < curr[`ema${EMA_SLOW}`] && emaFast < emaMid1 && emaFast < emaMid2
 
   // compute exit prices
   let reCalculateExit = false
