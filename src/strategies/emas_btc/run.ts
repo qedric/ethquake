@@ -207,16 +207,16 @@ export async function runPipelineTask() {
       slPriceShort = exitCalcPrice * (1 + SL_PCT / 100)
     }
     if (USE_TR) {
-      // Update trailing stop logic to match Pine script
-      trOffset = TR_PCT / 100 * curr.price
+      // Update trailing stop to use percentage directly
+      trOffset = TR_PCT
       if (inLong) {
         trailingStop = trailingStop === null 
-          ? curr.price - trOffset 
-          : Math.max(curr.high - trOffset, trailingStop)
+          ? curr.price * (1 - TR_PCT / 100)
+          : Math.max(curr.high * (1 - TR_PCT / 100), trailingStop)
       } else if (inShort) {
         trailingStop = trailingStop === null
-          ? curr.price + trOffset
-          : Math.min(curr.low + trOffset, trailingStop)
+          ? curr.price * (1 + TR_PCT / 100)
+          : Math.min(curr.low * (1 + TR_PCT / 100), trailingStop)
       }
     }
 
@@ -288,7 +288,7 @@ export async function runPipelineTask() {
     if (!inLong) {
       console.log(`[${config.name}] Opening long position at ${curr.price}`)
       const stopConfig = USE_TR
-        ? { type: 'trailing' as const, distance: trOffset! }
+        ? { type: 'trailing' as const, distance: TR_PCT }
         : USE_SL
           ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceLong! }
           : { type: 'none' as const, distance: 0 }
@@ -318,7 +318,7 @@ export async function runPipelineTask() {
     if (!inShort) {
       console.log(`[${config.name}] Opening short position at ${curr.price}`)
       const stopConfig = USE_TR
-        ? { type: 'trailing' as const, distance: trOffset! }
+        ? { type: 'trailing' as const, distance: TR_PCT }
         : USE_SL
           ? { type: 'fixed' as const, distance: 0, stopPrice: slPriceShort! }
           : { type: 'none' as const, distance: 0 }
