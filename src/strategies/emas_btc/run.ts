@@ -186,7 +186,6 @@ export async function runPipelineTask() {
   let tpPriceShort: number | null = null
   let slPriceLong: number | null = null
   let slPriceShort: number | null = null
-  let trOffset: number | null = null
 
   const inLong = currentPosition === 'long'
   const inShort = currentPosition === 'short'
@@ -208,7 +207,6 @@ export async function runPipelineTask() {
     }
     if (USE_TR) {
       // Update trailing stop to use percentage directly
-      trOffset = TR_PCT
       if (inLong) {
         trailingStop = trailingStop === null 
           ? curr.price * (1 - TR_PCT / 100)
@@ -229,7 +227,7 @@ export async function runPipelineTask() {
       // Replace stop order if we have one
       if (currentStopOrderId && (USE_TR || USE_SL)) {
         const stopConfig = USE_TR
-          ? { type: 'trailing' as const, distance: trOffset! }
+          ? { type: 'trailing' as const, distance: TR_PCT }
           : USE_SL
             ? { type: 'fixed' as const, distance: 0, stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort! }
             : { type: 'none' as const, distance: 0 }
