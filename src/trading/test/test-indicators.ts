@@ -86,6 +86,36 @@ const tests: TestCase[] = [
       const result = await getEMAs(FUTURES_PAIR, interval, [20, 50, 100, 200], 10)
       validateOHLCData(result, 'futures')
     }
+  },
+  {
+    name: 'Long-period spot market EMA calculation',
+    fn: async () => {
+      const interval = 240  // Use 4h candles for spot
+      console.log(`\nTesting long-period spot market EMA calculation (${interval}m interval)...`)
+      const result = await getEMAs(SPOT_PAIR, interval, [100, 200, 400], 1)  // Reduced periods to fit data
+      console.log('Long-period spot EMAs:', {
+        timestamp: result[0].timestamp,
+        ema100: result[0].ema100.toFixed(2),
+        ema200: result[0].ema200.toFixed(2),
+        ema400: result[0].ema400.toFixed(2)
+      })
+      validateLongEMAResult(result)
+    }
+  },
+  {
+    name: 'Long-period futures market EMA calculation',
+    fn: async () => {
+      const interval = 60  // Keep 1h for futures since we can get more data
+      console.log(`\nTesting long-period futures market EMA calculation (${interval}m interval)...`)
+      const result = await getEMAs(FUTURES_PAIR, interval, [200, 500, 800], 1)
+      console.log('Long-period futures EMAs:', {
+        timestamp: result[0].timestamp,
+        ema200: result[0].ema200.toFixed(2),
+        ema500: result[0].ema500.toFixed(2),
+        ema800: result[0].ema800.toFixed(2)
+      })
+      validateLongEMAResult(result)
+    }
   }
 ]
 
@@ -215,6 +245,41 @@ function validateOHLCData(result: CandleData[], market: 'spot' | 'futures' = 'sp
   }
   
   console.log('OHLC data integrity validated')
+}
+
+// Add new validation function for long EMAs
+function validateLongEMAResult(result: CandleData[]) {
+  if (!result || !Array.isArray(result)) {
+    throw new Error('Invalid long EMA structure')
+  }
+  
+  const latest = result[0]
+  
+  // Update validation for spot market EMAs
+  const hasSpotEMAs = typeof latest.ema100 === 'number' && 
+                     typeof latest.ema200 === 'number' && 
+                     typeof latest.ema400 === 'number'
+                     
+  const hasFuturesEMAs = typeof latest.ema200 === 'number' && 
+                        typeof latest.ema500 === 'number' && 
+                        typeof latest.ema800 === 'number'
+  
+  if (!hasSpotEMAs && !hasFuturesEMAs) {
+    throw new Error('Invalid long EMA values')
+  }
+  
+  // Verify reasonable relationships between EMAs
+  // Long period EMAs should generally be more smooth/stable
+  const maxSpread = 30 // max allowed % difference between longest and shortest EMAs
+  const spreadPct = hasSpotEMAs 
+    ? Math.abs((latest.ema400 - latest.ema100) / latest.ema100 * 100)
+    : Math.abs((latest.ema800 - latest.ema200) / latest.ema200 * 100)
+  
+  if (spreadPct > maxSpread) {
+    throw new Error(`Suspicious spread between EMAs: ${spreadPct.toFixed(2)}% (max allowed: ${maxSpread}%)`)
+  }
+  
+  console.log('Long EMA validation passed')
 }
 
 async function runTests() {

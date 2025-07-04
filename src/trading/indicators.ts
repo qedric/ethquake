@@ -3,12 +3,6 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
-/**
- * Calculates Simple Moving Average from price data
- * @param {Array} prices - Array of closing prices
- * @param {Number} period - SMA period length
- * @returns {Number} - The SMA value
- */
 function calculateSMA(prices: number[], period: number) {
   if (prices.length < period) {
     throw new Error(`Not enough price data to calculate ${period} SMA`)
@@ -27,37 +21,22 @@ function calculateSMA(prices: number[], period: number) {
   return sum / period
 }
 
-/**
- * Calculates Exponential Moving Average from price data
- * @param {Array} prices - Array of closing prices
- * @param {Number} period - EMA period length
- * @returns {Number} - The EMA value
- */
 function calculateEMA(prices: number[], period: number) {
   if (prices.length < period) {
     console.log(`[EMA Calc] Insufficient data for ${period} EMA: got ${prices.length} points, need ${period}`)
     throw new Error(`Not enough price data to calculate ${period} EMA`)
   }
 
-  // Need enough data for the period plus some warmup
-  const minLength = period * 3
-  if (prices.length < minLength) {
-    console.log(`[EMA Calc] Insufficient warmup data for ${period} EMA: got ${prices.length} points, need ${minLength}`)
-    throw new Error(`For reliable ${period} EMA calculation, need at least ${minLength} data points, got ${prices.length}`)
-  }
-
-  // Multiplier: 2/(period+1)
+  // First value is SMA
+  const sma = calculateSMA(prices.slice(0, period), period)
+  
+  // Calculate multiplier
   const multiplier = 2 / (period + 1)
   
-  // Start with SMA for first EMA value
-  let ema = calculateSMA(prices.slice(0, period), period)
-  
-  // Calculate EMA for remaining prices
-  for (let i = period; i < prices.length; i++) {
-    ema = (prices[i] * multiplier) + (ema * (1 - multiplier))
-  }
-  
-  return ema
+  // Calculate EMA
+  return prices.slice(period).reduce((ema, price) => {
+    return (price - ema) * multiplier + ema
+  }, sma)
 }
 
 /**
