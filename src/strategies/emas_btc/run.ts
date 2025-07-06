@@ -230,12 +230,12 @@ export async function runPipelineTask() {
       console.log(`[${config.name}] Updating exits for ${currentPosition} position at ${curr.price}`)
       
       // Replace stop order if we have one
-      if (currentStopOrderId && (USE_TR || USE_SL)) {
-        const stopConfig = USE_TR
-          ? { type: 'trailing' as const, distance: TR_PCT }
-          : USE_SL
-            ? { type: 'fixed' as const, distance: 0, stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort! }
-            : { type: 'none' as const, distance: 0 }
+      if (currentStopOrderId && USE_SL) {
+        const stopConfig = {
+          type: 'fixed' as const,
+          distance: 0,
+          stopPrice: currentPosition === 'long' ? slPriceLong! : slPriceShort!
+        }
 
         const result = await replaceOrder(
           currentStopOrderId,
