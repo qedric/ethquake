@@ -137,13 +137,18 @@ export async function runPipelineTask() {
   // Log successful EMA calculation for debugging
   console.log(`[${config.name}] EMAs calculated @ ${curr.price}:`, {
     timestamp: curr.timestamp,
-    [`ema${EMA_FAST}`]: emaFast.toFixed(2),
-    [`ema${EMA_MID_1}`]: emaMid1.toFixed(2),
-    [`ema${EMA_MID_2}`]: emaMid2.toFixed(2),
-    [`ema${EMA_SLOW}`]: emaSlow.toFixed(2),
-    [`ema${EMA_SENTIMENT}`]: emaSentiment ? emaSentiment[0][`ema${EMA_SENTIMENT}`].toFixed(2) : 'N/A'
+    current: {
+      [`ema${EMA_FAST}`]: emaFast.toFixed(2),
+      [`ema${EMA_MID_1}`]: emaMid1.toFixed(2),
+      [`ema${EMA_MID_2}`]: emaMid2.toFixed(2),
+      [`ema${EMA_SLOW}`]: emaSlow.toFixed(2),
+      [`ema${EMA_SENTIMENT}`]: emaSentiment ? emaSentiment[0][`ema${EMA_SENTIMENT}`].toFixed(2) : 'N/A'
+    },
+    previous: {
+      [`ema${EMA_FAST}`]: prev[`ema${EMA_FAST}`].toFixed(2),
+      [`ema${EMA_SLOW}`]: prev[`ema${EMA_SLOW}`].toFixed(2)
+    }
   })
-
 
   const sentimentIsLong = emaSentiment ? curr.price > emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
   const sentimentIsShort = emaSentiment ? curr.price < emaSentiment[0][`ema${EMA_SENTIMENT}`] : true
