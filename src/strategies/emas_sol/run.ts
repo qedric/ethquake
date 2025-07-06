@@ -1,5 +1,5 @@
 import { getEMAs } from '../../trading/indicators.js'
-import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
+import { placeOrder, replaceOrder, getOpenPositions } from '../../trading/kraken.js'
 import { getDb, logActivity } from '../../lib/mongodb.js'
 import { loadStrategyConfig } from '../../lib/loadConfig.js'
 
@@ -37,10 +37,16 @@ let trailingStop: number | null = null
 
 async function loadState() {
   const db = await getDb(DB_NAME)
+  console.log(`[${config.name}] Looking for state with query:`, {
+    strategy: config.name,
+    symbol: TRADING_PAIR
+  })
   const st = await db.collection(COLLECTION_NAME).findOne({ 
     strategy: config.name,
     symbol: TRADING_PAIR 
   })
+  
+  console.log(`[${config.name}] MongoDB returned:`, st)
   
   if (st) {
     currentPosition = st.currentPosition
@@ -57,9 +63,43 @@ async function loadState() {
       trailingStop
     })
     
-    // Verify position still exists
-    if (currentPosition && !await hasOpenPosition(TRADING_PAIR)) {
-      console.error(`[${config.name}] State reset: position not found`)
+    try {
+      // Get actual position from Kraken
+      const response = await getOpenPositions()
+      const positions = response.data.openPositions || []
+      const position = positions.find((pos: any) => pos.symbol === TRADING_PAIR)
+      
+      // Reset state if:
+      // 1. We think we have a position but don't
+      // 2. We think we don't have a position but do
+      // 3. Position direction doesn't match what we think we have
+      if (
+        (currentPosition && !position) || 
+        (!currentPosition && position) ||
+        (currentPosition === 'long' && position?.side === 'short') ||
+        (currentPosition === 'short' && position?.side === 'long')
+      ) {
+        console.error(`[${config.name}] State reset: position mismatch`)
+        console.log(`Expected: ${currentPosition || 'no position'}, Actual: ${position ? position.side : 'no position'}`)
+        currentPosition = null
+        entryPrice = null
+        currentStopOrderId = null
+        currentTakeProfitOrderId = null
+        trailingStop = null
+        await logActivity(DB_NAME, {
+          strategy: config.name,
+          symbol: TRADING_PAIR,
+          type: 'state_reset',
+          reason: 'position_mismatch',
+          details: {
+            expected: currentPosition || 'no position',
+            actual: position ? position.side : 'no position'
+          }
+        })
+      }
+    } catch (error) {
+      console.error(`[${config.name}] Error verifying position:`, error)
+      // If we can't verify the position, better to reset state to be safe
       currentPosition = null
       entryPrice = null
       currentStopOrderId = null
@@ -69,7 +109,7 @@ async function loadState() {
         strategy: config.name,
         symbol: TRADING_PAIR,
         type: 'state_reset',
-        reason: 'position_not_found'
+        reason: 'position_verification_error'
       })
     }
   }
