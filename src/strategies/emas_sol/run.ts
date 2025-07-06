@@ -178,10 +178,16 @@ export async function runPipelineTask() {
     // Log successful EMA calculation for debugging
     console.log(`[${config.name}] EMAs calculated @ ${curr.price}:`, {
       timestamp: curr.timestamp,
-      [`ema${EMA_FAST_LEN}`]: emaFast.toFixed(2),
-      [`ema${EMA_MID_1_LEN}`]: emaMid1.toFixed(2),
-      [`ema${EMA_MID_2_LEN}`]: emaMid2.toFixed(2),
-      [`ema${EMA_SLOW_LEN}`]: emaSlow.toFixed(2)
+      current: {
+        [`ema${EMA_FAST_LEN}`]: emaFast.toFixed(2),
+        [`ema${EMA_MID_1_LEN}`]: emaMid1.toFixed(2),
+        [`ema${EMA_MID_2_LEN}`]: emaMid2.toFixed(2),
+        [`ema${EMA_SLOW_LEN}`]: emaSlow.toFixed(2)
+      },
+      previous: {
+        [`ema${EMA_FAST_LEN}`]: prev[`ema${EMA_FAST_LEN}`].toFixed(2),
+        [`ema${EMA_SLOW_LEN}`]: prev[`ema${EMA_SLOW_LEN}`].toFixed(2)
+      }
     })
 
     // entry signals - exactly matching Pine script conditions
