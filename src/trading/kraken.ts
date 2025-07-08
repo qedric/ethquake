@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import axios from 'axios'
 import dotenv from 'dotenv'
 import querystring from 'querystring'
+import { Position, createPosition, updateOrderStatus, closePosition, updatePosition, getPosition } from './positions'
 
 dotenv.config()
 
@@ -284,7 +285,8 @@ interface OrderResponse {
   } | null
   status?: string
   error?: string
-  orderIds: string[]  // Add this to track all orders created
+  orderIds: string[]  // Track all orders created
+  positionId?: string // MongoDB position document ID
 }
 
 /**
@@ -296,7 +298,8 @@ export async function placeOrder(
   stopConfig: StopConfig = { type: 'none', distance: 0 },
   takeProfitConfig: TakeProfitConfig = { type: 'none', price: 0 },
   symbol: string,
-  reduceOnly: boolean = false
+  reduceOnly: boolean = false,
+  strategyId?: string // Added strategyId parameter
 ): Promise<OrderResponse> {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
@@ -306,8 +309,12 @@ export async function placeOrder(
   let stopOrderId: string | null = null
   let takeProfitOrderId: string | null = null
   let orderIds: string[] = []  // Track all orders created in this operation
+  let positionId: string | undefined // Track MongoDB position ID
 
   try {
+    // Get current price for entry
+    const currentPrice = await getCurrentPrice(symbol)
+
     // Create the market order data
     const marketOrderData = {
       orderType: 'mkt',
@@ -356,6 +363,29 @@ export async function placeOrder(
       marketOrderId = marketOrderResult.data.sendStatus?.order_id || null
       if (marketOrderId) orderIds.push(marketOrderId)
 
+      // Create position record if this is an opening trade (not reduceOnly)
+      if (!reduceOnly && strategyId && marketOrderId) {  // Add null check for marketOrderId
+        const position: Omit<Position, '_id'> = {
+          strategyId,
+          symbol,
+          side: side === 'buy' ? 'long' : 'short',
+          size,
+          status: 'open',
+          entryPrice: currentPrice,
+          openedAt: new Date(),
+          orders: {
+            entry: {
+              orderId: marketOrderId,
+              status: 'PLACED',
+              price: currentPrice,
+              timestamp: new Date()
+            }
+          }
+        }
+
+        positionId = await createPosition(position)
+      }
+
       // Verify market order
       if (marketOrderId) {
         const marketOrderVerified = await verifyOrder(marketOrderId, 'placed', false)
@@ -372,6 +402,11 @@ export async function placeOrder(
           }
           throw new Error('Failed to verify market order execution')
         }
+
+        // Update position with executed market order status
+        if (positionId) {
+          await updateOrderStatus(positionId, 'entry', 'FULLY_EXECUTED')
+        }
       }
 
       let stopOrderResult = null
@@ -381,7 +416,29 @@ export async function placeOrder(
 
         // Store the stop order ID for potential cleanup
         stopOrderId = stopOrderResult.data.sendStatus?.order_id || null
-        if (stopOrderId) orderIds.push(stopOrderId)
+        if (stopOrderId) {
+          orderIds.push(stopOrderId)
+          
+          // Update position with stop order if we're tracking it
+          if (positionId) {
+            const position = await getPosition(positionId)
+            if (position) {
+              await updatePosition(positionId, {
+                orders: {
+                  ...position.orders,
+                  stopLoss: {
+                    orderId: stopOrderId,
+                    status: 'PLACED',
+                    price: stopConfig.type === 'fixed' ? stopConfig.stopPrice : 0,
+                    type: stopConfig.type,
+                    distance: stopConfig.distance,
+                    timestamp: new Date()
+                  }
+                }
+              })
+            }
+          }
+        }
 
         // Verify stop order
         if (stopOrderId) {
@@ -400,6 +457,11 @@ export async function placeOrder(
             }
             throw new Error('Failed to verify stop order placement')
           }
+
+          // Update position with verified stop order status
+          if (positionId) {
+            await updateOrderStatus(positionId, 'stopLoss', 'TRIGGER_PLACED')
+          }
         }
       }
 
@@ -410,7 +472,27 @@ export async function placeOrder(
 
         // Store the take profit order ID for potential cleanup
         takeProfitOrderId = takeProfitOrderResult.data.sendStatus?.order_id || null
-        if (takeProfitOrderId) orderIds.push(takeProfitOrderId)
+        if (takeProfitOrderId) {
+          orderIds.push(takeProfitOrderId)
+          
+          // Update position with take profit order if we're tracking it
+          if (positionId) {
+            const position = await getPosition(positionId)
+            if (position) {
+              await updatePosition(positionId, {
+                orders: {
+                  ...position.orders,
+                  takeProfit: {
+                    orderId: takeProfitOrderId,
+                    status: 'PLACED',
+                    price: takeProfitConfig.price,
+                    timestamp: new Date()
+                  }
+                }
+              })
+            }
+          }
+        }
 
         // Verify take profit order
         if (takeProfitOrderId) {
@@ -428,6 +510,11 @@ export async function placeOrder(
             }
             throw new Error('Failed to verify take profit order execution')
           }
+
+          // Update position with verified take profit order status
+          if (positionId) {
+            await updateOrderStatus(positionId, 'takeProfit', 'TRIGGER_PLACED')
+          }
         }
       }
 
@@ -435,7 +522,8 @@ export async function placeOrder(
         marketOrder: marketOrderResult.data,
         stopOrder: stopOrderResult?.data,
         takeProfitOrder: takeProfitOrderResult?.data,
-        orderIds  // Return the IDs of all orders created
+        orderIds,
+        positionId
       }
     }
 
@@ -443,7 +531,8 @@ export async function placeOrder(
       marketOrder: null,
       stopOrder: null,
       takeProfitOrder: null,
-      orderIds: []
+      orderIds: [],
+      positionId: undefined
     }
   } catch (error) {
     // Final cleanup - try to cancel only orders we created
@@ -463,7 +552,8 @@ export async function placeOrder(
       takeProfitOrder: null,
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
-      orderIds: []
+      orderIds: [],
+      positionId: undefined
     }
   }
 }
@@ -575,7 +665,7 @@ export async function cancelOrder(orderId: string) {
 /**
  * Closes any open position for the given symbol
  */
-export async function cleanupPosition(symbol: string): Promise<boolean> {
+export async function cleanupPosition(symbol: string, strategyId?: string): Promise<boolean> {
   try {
     const response = await getOpenPositions()
     const positions = response.data.openPositions || []
@@ -589,10 +679,16 @@ export async function cleanupPosition(symbol: string): Promise<boolean> {
     const side = position.side === 'long' ? 'sell' : 'buy'
     const size = Math.abs(position.size)
     
-    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true)
+    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true, strategyId)
     
     if (result.marketOrder?.result !== 'success') {
       throw new Error('Failed to close position')
+    }
+
+    // If we have a position ID, mark it as closed
+    if (result.positionId) {
+      const currentPrice = await getCurrentPrice(symbol)
+      await closePosition(result.positionId, currentPrice, result.marketOrder.sendStatus.order_id, 'strategy')
     }
 
     // Verify position is closed
