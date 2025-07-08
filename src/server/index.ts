@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import transactionDataRouter from '../api/transactionData.js'
 import visualizationRouter from '../api/visualizationRouter.js'
+import strategiesRouter from '../api/strategiesRouter.js'
 import path from 'path'
 import basicAuth from 'express-basic-auth'
 import express from 'express'
@@ -71,6 +72,13 @@ async function loadStrategies() {
     }
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as StrategyConfig
+    
+    // Store strategy regardless of enabled status
+    strategies[config.name] = {
+      config,
+      runPipelineTask: async () => {} // Placeholder for disabled strategies
+    }
+
     if (!config.enabled) {
       console.log(`Strategy ${folder} is disabled in config`)
       continue
@@ -94,10 +102,7 @@ async function loadStrategies() {
       console.log(`Initializing strategy ${config.name}...`)
       await mod.runPipelineTask()
       
-      strategies[config.name] = {
-        config,
-        runPipelineTask: mod.runPipelineTask
-      }
+      strategies[config.name].runPipelineTask = mod.runPipelineTask
       console.log(`Successfully loaded strategy ${config.name}`)
 
       // Set up cron job immediately after strategy is loaded
@@ -117,42 +122,14 @@ async function loadStrategies() {
   }
 }
 
-// Keep the process alive with proper initialization
-async function startServer() {
-  try {
-    // Load strategies first
-    await loadStrategies()
-    
-    // Start Express server
-    app.listen(PORT, () => {
-      console.log(`Ethquake Server running on port ${PORT}.`)
-    })
-
-    // Add the router with authentication
-    app.use('/api/transactions', authMiddleware, transactionDataRouter)
-    app.use(express.static(path.join(__dirname, '../public')))
-    app.use('/charts', authMiddleware, visualizationRouter)
-  } catch (error) {
-    console.error('Failed to start server:', error)
-    // Important: Don't exit on startup error, retry instead
-    setTimeout(() => startServer(), 5000)
-  }
-}
-
-startServer()
-
-// Heartbeat for logs but not too frequent
-setInterval(() => {
-  console.log('Server heartbeat check')
-}, 300000) // 5 minutes instead of 1 minute
-
 // Status endpoint - might be useful someday, who knows
 app.get('/status', authMiddleware, async (req, res) => {
   try {
     const strategyStatuses = Object.entries(strategies).map(([name, strategy]) => ({
       name,
       enabled: strategy.config.enabled,
-      schedule: strategy.config.cronSchedule
+      schedule: strategy.config.cronSchedule,
+      description: strategy.config.description
     }))
 
     res.json({
@@ -180,4 +157,34 @@ app.post('/run-pipeline/:strategy', authMiddleware, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
-}) 
+})
+
+// Keep the process alive with proper initialization
+async function startServer() {
+  try {
+    // Load strategies first
+    await loadStrategies()
+    
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`Ethquake Server running on port ${PORT}.`)
+    })
+
+    // Add the router with authentication
+    app.use('/api/transactions', authMiddleware, transactionDataRouter)
+    app.use(express.static(path.join(__dirname, '../public')))
+    app.use('/charts', authMiddleware, visualizationRouter)
+    app.use('/strategies', authMiddleware, strategiesRouter)
+  } catch (error) {
+    console.error('Failed to start server:', error)
+    // Important: Don't exit on startup error, retry instead
+    setTimeout(() => startServer(), 5000)
+  }
+}
+
+startServer()
+
+// Heartbeat for logs but not too frequent
+setInterval(() => {
+  console.log('Server heartbeat check')
+}, 300000) // 5 minutes instead of 1 minute 
