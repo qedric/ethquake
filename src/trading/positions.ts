@@ -1,4 +1,4 @@
-import { client } from '../lib/mongodb'
+import { client } from '../lib/mongodb.js'
 
 export interface Position {
   _id?: string

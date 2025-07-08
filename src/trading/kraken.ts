@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import axios from 'axios'
 import dotenv from 'dotenv'
 import querystring from 'querystring'
-import { Position, createPosition, updateOrderStatus, closePosition, updatePosition, getPosition } from './positions'
+import { Position, createPosition, updateOrderStatus, closePosition, updatePosition, getPosition } from './positions.js'
 
 dotenv.config()
 
