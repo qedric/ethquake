@@ -282,7 +282,7 @@ export async function runPipelineTask() {
   if (longSignal) {
     if (inShort) {
       console.log(`[${config.name}] Closing short position at ${curr.price}`)
-      await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
+      await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name)
       currentPosition = null
       currentStopOrderId = null
       currentTakeProfitOrderId = null
@@ -300,7 +300,7 @@ export async function runPipelineTask() {
         ? { type: 'limit' as const, price: tpPriceLong }
         : { type: 'none' as const, price: 0 }
 
-      const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
+      const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name)
       currentPosition = 'long'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
@@ -312,7 +312,7 @@ export async function runPipelineTask() {
   if (shortSignal) {
     if (inLong) {
       console.log(`[${config.name}] Closing long position at ${curr.price}`)
-      await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true)
+      await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name)
       currentPosition = null
       currentStopOrderId = null
       currentTakeProfitOrderId = null
@@ -330,7 +330,7 @@ export async function runPipelineTask() {
         ? { type: 'limit' as const, price: tpPriceShort }
         : { type: 'none' as const, price: 0 }
 
-      const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR)
+      const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name)
       currentPosition = 'short'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
