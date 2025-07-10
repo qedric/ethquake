@@ -1,4 +1,5 @@
 import { client } from '../lib/mongodb.js'
+import { getOpenPositions, getCurrentPrice, getOrderStatus } from './kraken.js'
 
 export interface Position {
   _id?: string
@@ -180,11 +181,126 @@ export async function getPosition(positionId: string): Promise<Position | null> 
 /**
  * Gets all open positions
  */
-export async function getOpenPositions(): Promise<Position[]> {
+export async function getOpenPositionsFromDb(): Promise<Position[]> {
   if (!client) throw new Error('MongoDB client not initialized')
   return client
     .db('strategies')
     .collection<Position>('positions')
     .find({ status: 'open' })
     .toArray()
+} 
+
+/**
+ * Checks and updates position status against Kraken's API
+ * Returns true if position status was updated, false if no update needed
+ */
+export async function syncPositionWithExchange(
+  strategyId: string,
+  symbol: string
+): Promise<boolean> {
+  if (!client) throw new Error('MongoDB client not initialized')
+
+  // Get our local position record
+  const localPosition = await client
+    .db('strategies')
+    .collection<Position>('positions')
+    .findOne({ 
+      strategyId,
+      symbol,
+      status: 'open'  // Only check open positions
+    })
+
+  // Get position from Kraken
+  const response = await getOpenPositions()
+  const positions = response.data?.openPositions || []
+  const exchangePosition = positions.find((pos: any) => pos.symbol === symbol)
+
+  // If we have a local position but no exchange position, it was closed
+  if (localPosition && !exchangePosition) {
+    // Get current price for PnL calculation
+    const currentPrice = await getCurrentPrice(symbol)
+    
+    // Check if it was closed by one of our exit orders
+    let closeReason: 'stop_loss' | 'take_profit' | 'manual' = 'manual'
+    let closeOrderId = 'external_close'
+
+    // Check stop loss order status
+    if (localPosition.orders.stopLoss) {
+      try {
+        const stopStatus = await getOrderStatus(localPosition.orders.stopLoss.orderId)
+        if (stopStatus.status === 'FULLY_EXECUTED') {
+          closeReason = 'stop_loss'
+          closeOrderId = localPosition.orders.stopLoss.orderId
+        }
+      } catch (error) {
+        // If order not found, it wasn't this order that closed the position
+        console.log(`Stop loss order ${localPosition.orders.stopLoss.orderId} not found or error:`, error)
+      }
+    }
+
+    // If not closed by stop loss, check take profit
+    if (closeReason === 'manual' && localPosition.orders.takeProfit) {
+      try {
+        const tpStatus = await getOrderStatus(localPosition.orders.takeProfit.orderId)
+        if (tpStatus.status === 'FULLY_EXECUTED') {
+          closeReason = 'take_profit'
+          closeOrderId = localPosition.orders.takeProfit.orderId
+        }
+      } catch (error) {
+        // If order not found, it wasn't this order that closed the position
+        console.log(`Take profit order ${localPosition.orders.takeProfit.orderId} not found or error:`, error)
+      }
+    }
+    
+    // Mark position as closed with the determined reason
+    await closePosition(
+      localPosition._id!,
+      currentPrice,
+      closeOrderId,
+      closeReason
+    )
+    return true
+  }
+
+  // If we have an exchange position but no local position, something's wrong
+  // Log this but don't take action
+  if (!localPosition && exchangePosition) {
+    console.error(`Found exchange position for ${symbol} but no local record`, exchangePosition)
+    return false
+  }
+
+  // If we have both, check if stop orders are still active
+  if (localPosition && exchangePosition) {
+    const updates: any = {}
+    
+    // Check stop loss order
+    if (localPosition.orders.stopLoss) {
+      const stopStatus = await getOrderStatus(localPosition.orders.stopLoss.orderId)
+      if (stopStatus.status !== localPosition.orders.stopLoss.status) {
+        updates['orders.stopLoss.status'] = stopStatus.status
+      }
+    }
+
+    // Check take profit order
+    if (localPosition.orders.takeProfit) {
+      const tpStatus = await getOrderStatus(localPosition.orders.takeProfit.orderId)
+      if (tpStatus.status !== localPosition.orders.takeProfit.status) {
+        updates['orders.takeProfit.status'] = tpStatus.status
+      }
+    }
+
+    // If we have updates, apply them
+    if (Object.keys(updates).length > 0) {
+      await client
+        .db('strategies')
+        .collection<Position>('positions')
+        .updateOne(
+          { _id: localPosition._id },
+          { $set: updates }
+        )
+      return true
+    }
+  }
+
+  return false
 } 

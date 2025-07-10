@@ -3,6 +3,7 @@ import { countTransactionsByHour } from './scripts/txCountByHour.js'
 import { executeTradeStrategy } from './strategy.js'
 import { getDb } from '../../lib/mongodb.js'
 import { selectDatabase } from './database/dbSelector.js'
+import { syncPositionWithExchange } from '../../trading/positions.js'
 
 let isInitialized = false
 let initializationPromise: Promise<void> | null = null
@@ -46,6 +47,9 @@ export async function runPipelineTask() {
   try {
     // Get a database connection
     const db = await getDb(selectedDbName as string)
+
+    // Check and update position status first
+    await syncPositionWithExchange('ethquake', 'PF_ETHUSD')
 
     // Update transactions data
     const txResult = await updateTransactionsByAddressesOfInterest({

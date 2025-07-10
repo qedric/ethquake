@@ -2,6 +2,7 @@ import { getEMAs } from '../../trading/indicators.js'
 import { placeOrder, hasOpenPosition, replaceOrder } from '../../trading/kraken.js'
 import { getDb, logActivity } from '../../lib/mongodb.js'
 import { loadStrategyConfig } from '../../lib/loadConfig.js'
+import { syncPositionWithExchange } from '../../trading/positions.js'
 
 // Load configuration values from strategy.json
 const config = loadStrategyConfig('strategies/emas_btc')
@@ -120,6 +121,9 @@ export async function runPipelineTask() {
       hasTakeProfitOrder: !!currentTakeProfitOrderId
     }
   })
+
+  // Check and update position status first
+  await syncPositionWithExchange(config.name, TRADING_PAIR)
 
   // fetch latest EMAs
   const candles = await getEMAs(TRADING_PAIR, TIMEFRAME, [EMA_FAST, EMA_MID_1, EMA_MID_2, EMA_SLOW], 2)
