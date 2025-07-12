@@ -5,11 +5,11 @@
     "cronSchedule": "15 * * * * *",
     "trading": {
         "symbol": "PF_SOLUSD",
-        "position_size": 6,
-        "timeframe": 5
+        "position_size": 8,
+        "timeframe": 15
     },
     "indicators": {
-        "ema_fast": 9,
+        "ema_fast": 16,
         "ema_mid_1": 50,
         "ema_mid_2": 100,
         "ema_slow": 200
@@ -25,7 +25,7 @@
         },
         "trailing_stop": {
             "enabled": true,
-            "percentage": 6.0
+            "percentage": 5.0
         }
     }
 } 
