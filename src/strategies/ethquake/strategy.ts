@@ -1,5 +1,5 @@
 import { getDb } from '../../lib/mongodb.js'
-import { placeOrder } from '../../trading/kraken.js'
+import { placeOrder, getCurrentPrice } from '../../trading/kraken.js'
 import { getEMAs } from '../../trading/indicators.js'
 import { sendAlert } from '../../alerts/index.js'
 
@@ -142,11 +142,51 @@ export async function executeTradeStrategy() {
       return
     }
 
-    // Place order
+    // Place order with trailing stop
     let orderResult = null
+    let fixedStopResult = null
     if (direction === 'buy' || direction === 'sell') {
       console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
       orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake')
+      
+      // If the initial order was successful, place an additional fixed stop loss
+      if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
+        console.log(`[Strategy: ethquake] Initial order successful, placing additional 2% fixed stop loss`)
+        
+        try {
+          // Calculate the fixed stop price based on direction and current price
+          const currentPrice = await getCurrentPrice(TRADING_PAIR)
+          const stopDistance = 0.02 // 2%
+          const fixedStopPrice = direction === 'buy' 
+            ? currentPrice * (1 - stopDistance) // For buy orders, stop below current price
+            : currentPrice * (1 + stopDistance) // For sell orders, stop above current price
+          
+          const fixedStopConfig = { 
+            type: 'fixed' as const, 
+            distance: 2, 
+            stopPrice: fixedStopPrice 
+          }
+          
+          // Place the fixed stop loss order
+          fixedStopResult = await placeOrder(
+            direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
+            POSITION_SIZE,
+            fixedStopConfig,
+            { type: 'none', price: 0 },
+            TRADING_PAIR,
+            true, // reduceOnly = true for stop loss
+            'ethquake'
+          )
+          
+          if (fixedStopResult?.stopOrder?.result === 'success') {
+            console.log(`[Strategy: ethquake] Fixed stop loss placed successfully at ${fixedStopPrice}`)
+          } else {
+            console.error(`[Strategy: ethquake] Failed to place fixed stop loss:`, fixedStopResult?.error)
+          }
+        } catch (fixedStopError) {
+          console.error(`[Strategy: ethquake] Error placing fixed stop loss:`, fixedStopError)
+        }
+      }
     }
 
     // Record the signal and order in the database
@@ -159,16 +199,23 @@ export async function executeTradeStrategy() {
       market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
       stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
       stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
+      fixed_stop_order_id: fixedStopResult?.stopOrder?.sendStatus?.order_id || null,
+      fixed_stop_status: fixedStopResult?.stopOrder?.sendStatus?.status || 'failed',
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
 
-    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nStop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}`)
+    const fixedStopInfo = fixedStopResult?.stopOrder?.result === 'success' 
+      ? `\nFixed Stop Loss: ${fixedStopResult.stopOrder.sendStatus.status}` 
+      : '\nFixed Stop Loss: failed'
+    
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nTrailing Stop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}${fixedStopInfo}`)
     
     return {
       signalHour,
       direction,
-      orderResult
+      orderResult,
+      fixedStopResult
     }
     
   } catch (error) {
