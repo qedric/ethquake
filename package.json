@@ -16,7 +16,11 @@
     "add-timestamps": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/maintenance.ts add-timestamps",
     "get-new-addresses": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/maintenance.ts get-new-addresses",
     "cleanup-addresses": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/cleanup.ts",
-    "run-pipeline-b": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/runPipelineB.ts"
+    "run-pipeline-b": "ts-node --project tsconfig.json --require tsconfig-paths/register src/strategies/ethquake/scripts/runPipelineB.ts",
+    "test:position-sizing": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' --require tsconfig-paths/register src/trading/test/test-position-sizing.ts",
+    "test:orders": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' --require tsconfig-paths/register src/trading/test/test-orders.ts",
+    "test:indicators": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' --require tsconfig-paths/register src/trading/test/test-indicators.ts",
+    "test:strategy": "NODE_NO_WARNINGS=1 node --import 'data:text/javascript,import { register } from \"node:module\"; import { pathToFileURL } from \"node:url\"; register(\"ts-node/esm\", pathToFileURL(\"./\"));' --require tsconfig-paths/register src/trading/test/test-strategy.ts"
   },
   "keywords": [],
   "author": "",
