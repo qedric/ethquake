@@ -5,7 +5,8 @@
     "cronSchedule": "0 */15 * * * *",
     "trading": {
         "symbol": "PF_SOLUSD",
-        "position_size": 8,
+        "position_size": 2.5,
+        "position_size_type": "risk",
         "timeframe": 15
     },
     "indicators": {
