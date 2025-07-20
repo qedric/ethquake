@@ -107,7 +107,7 @@ const tests: TestCase[] = [
     fn: async () => {
       // Open long position
       console.log('\nPlacing long market order...')
-      const longResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL)
+      const longResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       if (!longResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place long market order')
       }
@@ -130,7 +130,7 @@ const tests: TestCase[] = [
       
       // Close long position
       console.log('\nClosing long position...')
-      const closeLongResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true)
+      const closeLongResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
       if (!closeLongResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place closing sell order')
       }
@@ -155,7 +155,7 @@ const tests: TestCase[] = [
       
       // Open short position
       console.log('\nPlacing short market order...')
-      const shortResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL)
+      const shortResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       if (!shortResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place short market order')
       }
@@ -178,7 +178,7 @@ const tests: TestCase[] = [
       
       // Close short position
       console.log('\nClosing short position...')
-      const closeShortResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true)
+      const closeShortResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
       if (!closeShortResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place closing buy order')
       }
@@ -220,7 +220,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: stopLossPrice },
         { type: 'limit', price: takeProfitPrice },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
       
       // Verify market order
@@ -295,7 +298,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice },
         { type: 'limit', price: takeProfitPrice },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
 
       // Validate all orders
@@ -324,7 +330,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'trailing', distance: trailDistance },
         { type: 'none', price: 0 },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
 
       // Validate orders
@@ -356,7 +365,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'trailing', distance: trailDistance },
         { type: 'none', price: 0 },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
 
       // Validate orders
@@ -394,7 +406,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: initialStopPrice },
         { type: 'limit', price: initialTpPrice },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
 
       if (!initialResult.stopOrder?.sendStatus?.order_id) {
@@ -413,7 +428,8 @@ const tests: TestCase[] = [
         { type: 'fixed', distance: 0, stopPrice: newStopPrice },
         { type: 'none', price: 0 },
         TEST_SYMBOL,
-        true // isStopOrder
+        true, // isStopOrder
+        'fixed'
       )
 
       if (!replaceStopResult.success || !replaceStopResult.newOrderId) {
@@ -436,7 +452,8 @@ const tests: TestCase[] = [
         { type: 'none', distance: 0 },
         { type: 'limit', price: newTpPrice },
         TEST_SYMBOL,
-        false // isStopOrder
+        false, // isStopOrder
+        'fixed'
       )
 
       if (!replaceTpResult.success || !replaceTpResult.newOrderId) {
@@ -458,7 +475,7 @@ const tests: TestCase[] = [
     name: 'Position cleanup and verification',
     fn: async () => {
       // Open a position
-      await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL)
+      await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       
       // Verify it exists
       if (!await hasOpenPosition(TEST_SYMBOL)) {
@@ -492,7 +509,10 @@ const tests: TestCase[] = [
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: farStopPrice },
         { type: 'none', price: 0 },
-        TEST_SYMBOL
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
       )
 
       if (!result.stopOrder?.sendStatus?.order_id) {
