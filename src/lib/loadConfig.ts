@@ -9,7 +9,8 @@ export interface StrategyConfig {
     cronSchedule: string
     trading: {
         symbol: string
-        position_size: number
+        position_size: number // default to fixed
+        position_size_type?: 'percent' | 'fixed' | 'risk'
         timeframe: number
     }
     indicators: {

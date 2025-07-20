@@ -11,9 +11,11 @@ function roundPrice(price: number): number {
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
 const ALERT_THRESHOLD = 40 // if the most recent hour has a count exceeding this threshold, send an alert
-const POSITION_SIZE = 2
+const POSITION_SIZE = 6 // % of account risked - this combines with the fixed stop distance to determine the position size
 const TRADING_PAIR = 'PF_ETHUSD'
-const STOP_CONFIG = { type: 'trailing' as const, distance: 4 } // 4% trailing stop
+const FIXED_STOP_DISTANCE = 2 // % fixed stop - this combines with the position size to determine the stop price
+const TRAILING_STOP_DISTANCE = 4 // % trailing stop for profit protection
+const POSITION_SIZE_TYPE = 'risk'
 
 // Constants
 const DB_NAME = process.env.MONGO_DB_NAME || 'ethquake'
@@ -147,50 +149,57 @@ export async function executeTradeStrategy() {
       return
     }
 
-    // Place order with trailing stop
+    // Place order with fixed stop for risk sizing, then add trailing stop
     let orderResult = null
-    let fixedStopResult = null
+    let trailingStopResult = null
     if (direction === 'buy' || direction === 'sell') {
       console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-      orderResult = await placeOrder(direction, POSITION_SIZE, STOP_CONFIG, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake')
       
-      // If the initial order was successful, place an additional fixed stop loss
+      // Calculate the fixed stop price for risk sizing
+      const currentPrice = await getCurrentPrice(TRADING_PAIR)
+      const fixedStopPrice = roundPrice(direction === 'buy' 
+        ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
+        : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
+      )
+      
+      const fixedStopConfig = { 
+        type: 'fixed' as const, 
+        distance: FIXED_STOP_DISTANCE, 
+        stopPrice: fixedStopPrice 
+      }
+      
+      // Place order with fixed stop (this determines position size based on 2% risk)
+      orderResult = await placeOrder(direction, POSITION_SIZE, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', POSITION_SIZE_TYPE)
+      
+      // If the initial order was successful, place a trailing stop for profit protection
       if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
-        console.log(`[Strategy: ethquake] Initial order successful, placing additional 2% fixed stop loss`)
+        console.log(`[Strategy: ethquake] Initial order successful, placing trailing stop for profit protection at ${TRAILING_STOP_DISTANCE}%`)
         
         try {
-          // Calculate the fixed stop price based on direction and current price
-          const currentPrice = await getCurrentPrice(TRADING_PAIR)
-          const stopDistance = 0.02 // 2%
-          const fixedStopPrice = roundPrice(direction === 'buy' 
-            ? currentPrice * (1 - stopDistance) // For buy orders, stop below current price
-            : currentPrice * (1 + stopDistance) // For sell orders, stop above current price
-          )
-          
-          const fixedStopConfig = { 
-            type: 'fixed' as const, 
-            distance: 2, 
-            stopPrice: fixedStopPrice 
+          const trailingStopConfig = { 
+            type: 'trailing' as const, 
+            distance: TRAILING_STOP_DISTANCE 
           }
           
-          // Place the fixed stop loss order
-          fixedStopResult = await placeOrder(
+          // Place the trailing stop order (same size as main position)
+          trailingStopResult = await placeOrder(
             direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
             POSITION_SIZE,
-            fixedStopConfig,
+            trailingStopConfig,
             { type: 'none', price: 0 },
             TRADING_PAIR,
             true, // reduceOnly = true for stop loss
-            'ethquake'
+            'ethquake',
+            'fixed' // Use fixed size for trailing stop since position is already open
           )
           
-          if (fixedStopResult?.stopOrder?.result === 'success') {
-            console.log(`[Strategy: ethquake] Fixed stop loss placed successfully at ${fixedStopPrice}`)
+          if (trailingStopResult?.stopOrder?.result === 'success') {
+            console.log(`[Strategy: ethquake] Trailing stop placed successfully at ${TRAILING_STOP_DISTANCE}%`)
           } else {
-            console.error(`[Strategy: ethquake] Failed to place fixed stop loss:`, fixedStopResult?.error)
+            console.error('[Strategy: ethquake] Failed to place trailing stop:', trailingStopResult?.error)
           }
-        } catch (fixedStopError) {
-          console.error(`[Strategy: ethquake] Error placing fixed stop loss:`, fixedStopError)
+        } catch (trailingStopError) {
+          console.error('[Strategy: ethquake] Error placing trailing stop:', trailingStopError)
         }
       }
     }
@@ -203,25 +212,25 @@ export async function executeTradeStrategy() {
       ema_data: indicators,
       market_order_id: orderResult?.marketOrder?.sendStatus?.order_id || null,
       market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
-      stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
-      stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
-      fixed_stop_order_id: fixedStopResult?.stopOrder?.sendStatus?.order_id || null,
-      fixed_stop_status: fixedStopResult?.stopOrder?.sendStatus?.status || 'failed',
+      fixed_stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
+      fixed_stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
+      trailing_stop_order_id: trailingStopResult?.stopOrder?.sendStatus?.order_id || null,
+      trailing_stop_status: trailingStopResult?.stopOrder?.sendStatus?.status || 'failed',
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
 
-    const fixedStopInfo = fixedStopResult?.stopOrder?.result === 'success' 
-      ? `\nFixed Stop Loss: ${fixedStopResult.stopOrder.sendStatus.status}` 
-      : '\nFixed Stop Loss: failed'
+    const trailingStopInfo = trailingStopResult?.stopOrder?.result === 'success' 
+      ? `\nTrailing Stop: ${trailingStopResult.stopOrder.sendStatus.status}` 
+      : '\nTrailing Stop: failed'
     
-    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nTrailing Stop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}${fixedStopInfo}`)
+    sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nFixed Stop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}${trailingStopInfo}`)
     
     return {
       signalHour,
       direction,
       orderResult,
-      fixedStopResult
+      trailingStopResult
     }
     
   } catch (error) {

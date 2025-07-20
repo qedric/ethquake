@@ -115,6 +115,108 @@ export async function getCurrentPrice(symbol: string): Promise<number> {
   }
 }
 
+/**
+ * Gets the account balance/portfolio value
+ */
+export async function getAccountBalance(): Promise<number> {
+  if (!API_KEY || !API_SECRET) {
+    throw new Error('Kraken API credentials not configured')
+  }
+
+  const nonce = Date.now().toString()
+  const payload = {}
+  const data = querystring.stringify(payload)
+  const signature = getKrakenSignature('/api/v3/accounts', nonce, data)
+
+  let config = {
+    method: 'GET',
+    maxBodyLength: Infinity,
+    url: 'https://futures.kraken.com/derivatives/api/v3/accounts',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'APIKey': API_KEY,
+      'Authent': signature,
+      'Nonce': nonce
+    }
+  }
+
+  try {
+    const response = await axios.request(config)
+    if (response.data.result === 'success' && response.data.accounts) {
+      // Look for the multiCollateralMarginAccount which contains the portfolio value
+      const accounts = response.data.accounts as Record<string, any>
+      
+      // Find the multiCollateralMarginAccount (usually named 'flex')
+      for (const [, account] of Object.entries(accounts)) {
+        if (account.type === 'multiCollateralMarginAccount') {
+          return parseFloat(account.portfolioValue || '0')
+        }
+      }
+      
+      // Fallback: if no multiCollateralMarginAccount found, try to find any account with portfolioValue
+      for (const [, account] of Object.entries(accounts)) {
+        if (account.portfolioValue) {
+          return parseFloat(account.portfolioValue)
+        }
+      }
+      
+      throw new Error('No multiCollateralMarginAccount found in response')
+    }
+    throw new Error('Failed to get account balance')
+  } catch (error) {
+    console.error('Error getting account balance:', error)
+    throw error
+  }
+}
+
+/**
+ * Calculates position size based on type (fixed, percentage, or risk)
+ */
+export async function calculatePositionSize(
+  positionSize: number,
+  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed',
+  symbol: string,
+  stopDistance?: number // Required for risk-based sizing
+): Promise<number> {
+  if (positionSizeType === 'fixed') {
+    return positionSize
+  }
+
+  if (positionSizeType === 'percent') {
+    const accountBalance = await getAccountBalance()
+    const currentPrice = await getCurrentPrice(symbol)
+    
+    // Calculate position size as percentage of portfolio value
+    const portfolioValue = accountBalance * (positionSize / 100)
+    const positionSizeInUnits = portfolioValue / currentPrice
+    
+    // Use the existing roundPrice function for consistency
+    return roundPrice(positionSizeInUnits)
+  }
+
+  if (positionSizeType === 'risk') {
+    if (stopDistance === undefined || stopDistance <= 0) {
+      throw new Error('Stop distance is required for risk-based position sizing')
+    }
+    
+    const accountBalance = await getAccountBalance()
+    const currentPrice = await getCurrentPrice(symbol)
+    
+    // Calculate position size based on risk
+    // If we want to risk X% of account and stop is Y% away, then:
+    // Risk Amount = Account Balance * (X / 100)
+    // Position Size = Risk Amount / (Current Price * Y / 100)
+    const riskAmount = accountBalance * (positionSize / 100)
+    const stopDistanceInPrice = currentPrice * (stopDistance / 100)
+    const positionSizeInUnits = riskAmount / stopDistanceInPrice
+    
+    // Use the existing roundPrice function for consistency
+    return roundPrice(positionSizeInUnits)
+  }
+
+  throw new Error(`Invalid position size type: ${positionSizeType}`)
+}
+
 const MAX_VERIFICATION_ATTEMPTS = 3
 const VERIFICATION_DELAY_MS = 1000
 const INITIAL_VERIFICATION_DELAY_MS = 3000
@@ -191,15 +293,24 @@ export async function replaceOrder(
   stopConfig: StopConfig,
   takeProfitConfig: TakeProfitConfig,
   symbol: string,
-  isStopOrder: boolean = true // true for stop orders, false for take profit
+  isStopOrder: boolean = true, // true for stop orders, false for take profit
+  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed' // Added position size type parameter
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
+    // Calculate the actual position size based on type
+    const calculatedSize = await calculatePositionSize(
+      size, 
+      positionSizeType, 
+      symbol,
+      positionSizeType === 'risk' ? stopConfig.distance : undefined
+    )
+    
     // Create the appropriate order data based on type
     const orderData = isStopOrder && stopConfig.type === 'trailing' ? {
       orderType: 'trailing_stop',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       trailingStopDeviationUnit: 'PERCENT',
       trailingStopMaxDeviation: stopConfig.distance,
       reduceOnly: true,
@@ -208,7 +319,7 @@ export async function replaceOrder(
       orderType: 'stp',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       stopPrice: roundPrice((stopConfig as FixedStopConfig).stopPrice),
       reduceOnly: true,
       triggerSignal: 'mark'
@@ -216,7 +327,7 @@ export async function replaceOrder(
       orderType: 'take_profit',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       stopPrice: roundPrice(takeProfitConfig.price),
       reduceOnly: true,
       triggerSignal: 'mark'
@@ -299,7 +410,8 @@ export async function placeOrder(
   takeProfitConfig: TakeProfitConfig = { type: 'none', price: 0 },
   symbol: string,
   reduceOnly: boolean = false,
-  strategyId?: string // Added strategyId parameter
+  strategyId?: string, // Added strategyId parameter
+  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed' // Added position size type parameter
 ): Promise<OrderResponse> {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
@@ -312,6 +424,14 @@ export async function placeOrder(
   let positionId: string | undefined // Track MongoDB position ID
 
   try {
+    // Calculate the actual position size based on type
+    const calculatedSize = await calculatePositionSize(
+      size, 
+      positionSizeType, 
+      symbol,
+      positionSizeType === 'risk' ? stopConfig.distance : undefined
+    )
+    
     // Get current price for entry
     const currentPrice = await getCurrentPrice(symbol)
 
@@ -319,7 +439,7 @@ export async function placeOrder(
     const marketOrderData = {
       orderType: 'mkt',
       symbol: symbol,
-      size: size,
+      size: calculatedSize,
       side: side.toLowerCase(),
       reduceOnly  // Use the passed reduceOnly parameter for market orders
     }
@@ -329,7 +449,7 @@ export async function placeOrder(
       orderType: 'trailing_stop',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       trailingStopDeviationUnit: 'PERCENT',
       trailingStopMaxDeviation: stopConfig.distance,
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
@@ -338,7 +458,7 @@ export async function placeOrder(
       orderType: 'stp',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       stopPrice: roundPrice(stopConfig.stopPrice),
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
       triggerSignal: 'mark'
@@ -349,7 +469,7 @@ export async function placeOrder(
       orderType: 'take_profit',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: size,
+      size: calculatedSize,
       stopPrice: roundPrice(takeProfitConfig.price),
       reduceOnly: true,  // Always true for take profit orders to prevent position stacking
       triggerSignal: 'mark'
@@ -369,7 +489,7 @@ export async function placeOrder(
           strategyId,
           symbol,
           side: side === 'buy' ? 'long' : 'short',
-          size,
+          size: calculatedSize,
           status: 'open',
           entryPrice: currentPrice,
           openedAt: new Date(),
@@ -679,7 +799,7 @@ export async function cleanupPosition(symbol: string, strategyId?: string): Prom
     const side = position.side === 'long' ? 'sell' : 'buy'
     const size = Math.abs(position.size)
     
-    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true, strategyId)
+    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true, strategyId, 'fixed')
     
     if (result.marketOrder?.result !== 'success') {
       throw new Error('Failed to close position')

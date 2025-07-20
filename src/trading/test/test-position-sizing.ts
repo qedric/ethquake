@@ -86,14 +86,14 @@ async function testPositionSizing() {
           const expectedSize = portfolioValue / currentPrice
           const difference = Math.abs(calculatedSize - expectedSize)
           
-          console.log(`   📊 Calculation Breakdown:`)
+          console.log('   📊 Calculation Breakdown:')
           console.log(`      Portfolio Value (${test.positionSize}%): $${portfolioValue.toFixed(2)}`)
           console.log(`      Expected Size: ${expectedSize.toFixed(4)} units`)
           console.log(`      Difference: ${difference.toFixed(4)} units`)
           
           // Show what the order would look like
-          console.log(`   📋 Sample Order Parameters:`)
-          console.log(`      Side: 'buy'`)
+          console.log('   📋 Sample Order Parameters:')
+          console.log('      Side: "buy"')
           console.log(`      Size: ${calculatedSize.toFixed(4)}`)
           console.log(`      Symbol: ${TEST_SYMBOL}`)
           console.log(`      Estimated Order Value: $${(calculatedSize * currentPrice).toFixed(2)}`)
@@ -103,15 +103,15 @@ async function testPositionSizing() {
           const expectedSize = riskAmount / stopDistanceInPrice
           const difference = Math.abs(calculatedSize - expectedSize)
           
-          console.log(`   📊 Risk Calculation Breakdown:`)
+          console.log('   📊 Risk Calculation Breakdown:')
           console.log(`      Risk Amount (${test.positionSize}% of account): $${riskAmount.toFixed(2)}`)
           console.log(`      Stop Distance (${test.stopDistance}%): $${stopDistanceInPrice.toFixed(2)}`)
           console.log(`      Expected Size: ${expectedSize.toFixed(4)} units`)
           console.log(`      Difference: ${difference.toFixed(4)} units`)
           
           // Show what the order would look like
-          console.log(`   📋 Sample Order Parameters:`)
-          console.log(`      Side: 'buy'`)
+          console.log('   📋 Sample Order Parameters:')
+          console.log('      Side: "buy"')
           console.log(`      Size: ${calculatedSize.toFixed(4)}`)
           console.log(`      Symbol: ${TEST_SYMBOL}`)
           console.log(`      Estimated Order Value: $${(calculatedSize * currentPrice).toFixed(2)}`)
