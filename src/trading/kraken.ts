@@ -176,7 +176,8 @@ export async function calculatePositionSize(
   positionSize: number,
   positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed',
   symbol: string,
-  stopDistance?: number // Required for risk-based sizing
+  stopDistance?: number, // Required for risk-based sizing
+  precision?: number // Decimal places for rounding
 ): Promise<number> {
   if (positionSizeType === 'fixed') {
     return positionSize
@@ -190,8 +191,9 @@ export async function calculatePositionSize(
     const portfolioValue = accountBalance * (positionSize / 100)
     const positionSizeInUnits = portfolioValue / currentPrice
     
-    // Use the existing roundPrice function for consistency
-    return roundPrice(positionSizeInUnits)
+    // Round to specified precision or use default
+    const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
+    return Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
   }
 
   if (positionSizeType === 'risk') {
@@ -210,8 +212,24 @@ export async function calculatePositionSize(
     const stopDistanceInPrice = currentPrice * (stopDistance / 100)
     const positionSizeInUnits = riskAmount / stopDistanceInPrice
     
-    // Use the existing roundPrice function for consistency
-    return roundPrice(positionSizeInUnits)
+    // Round to specified precision or use default
+    const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
+
+    let calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    console.log(`[Symbol: ${symbol}] Calculated position size: ${calculatedSize} units`)
+    // temp protection until we've confirmed the position size calculation is working
+    if (symbol === 'PF_XBTUSD' && calculatedSize > 0.02) {
+      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
+      calculatedSize = 0.02
+    } else if (symbol === 'PF_ETHUSD' && calculatedSize > 2.5) {
+      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
+      calculatedSize = 2.5
+    } else if (symbol === 'PF_SOLUSD' && calculatedSize > 10) {
+      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
+      calculatedSize = 10
+    }
+
+    return calculatedSize
   }
 
   throw new Error(`Invalid position size type: ${positionSizeType}`)
@@ -294,7 +312,8 @@ export async function replaceOrder(
   takeProfitConfig: TakeProfitConfig,
   symbol: string,
   isStopOrder: boolean = true, // true for stop orders, false for take profit
-  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed' // Added position size type parameter
+  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed', // Added position size type parameter
+  precision?: number // Decimal places for position size rounding
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
     // Calculate the actual position size based on type
@@ -302,7 +321,8 @@ export async function replaceOrder(
       size, 
       positionSizeType, 
       symbol,
-      positionSizeType === 'risk' ? stopConfig.distance : undefined
+      positionSizeType === 'risk' ? stopConfig.distance : undefined,
+      precision
     )
     
     // Create the appropriate order data based on type
@@ -411,7 +431,8 @@ export async function placeOrder(
   symbol: string,
   reduceOnly: boolean = false,
   strategyId?: string, // Added strategyId parameter
-  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed' // Added position size type parameter
+  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed', // Added position size type parameter
+  precision?: number // Decimal places for position size rounding
 ): Promise<OrderResponse> {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
@@ -429,7 +450,8 @@ export async function placeOrder(
       size, 
       positionSizeType, 
       symbol,
-      positionSizeType === 'risk' ? stopConfig.distance : undefined
+      positionSizeType === 'risk' ? stopConfig.distance : undefined,
+      precision
     )
     
     // Get current price for entry

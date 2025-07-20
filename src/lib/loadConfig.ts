@@ -11,6 +11,7 @@ export interface StrategyConfig {
         symbol: string
         position_size: number // default to fixed
         position_size_type?: 'percent' | 'fixed' | 'risk'
+        position_size_precision?: number // decimal places for position size rounding
         timeframe: number
     }
     indicators: {

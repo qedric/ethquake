@@ -1,5 +1,5 @@
 import { getDb } from '../../lib/mongodb.js'
-import { placeOrder, getCurrentPrice } from '../../trading/kraken.js'
+import { placeOrder, getCurrentPrice, calculatePositionSize } from '../../trading/kraken.js'
 import { getEMAs } from '../../trading/indicators.js'
 import { sendAlert } from '../../alerts/index.js'
 
@@ -12,6 +12,7 @@ const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
 const ALERT_THRESHOLD = 40 // if the most recent hour has a count exceeding this threshold, send an alert
 const POSITION_SIZE = 6 // % of account risked - this combines with the fixed stop distance to determine the position size
+const POSITION_SIZE_PRECISION = 3 // decimal places for position size rounding
 const TRADING_PAIR = 'PF_ETHUSD'
 const FIXED_STOP_DISTANCE = 2 // % fixed stop - this combines with the position size to determine the stop price
 const TRAILING_STOP_DISTANCE = 4 // % trailing stop for profit protection
@@ -168,8 +169,12 @@ export async function executeTradeStrategy() {
         stopPrice: fixedStopPrice 
       }
       
+      // Calculate the position size first (this will be the same for both market order and trailing stop)
+      const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
+      console.log(`[Strategy: ethquake] Calculated position size: ${calculatedPositionSize} units`)
+
       // Place order with fixed stop (this determines position size based on 2% risk)
-      orderResult = await placeOrder(direction, POSITION_SIZE, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', POSITION_SIZE_TYPE)
+      orderResult = await placeOrder(direction, calculatedPositionSize, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', 'fixed', POSITION_SIZE_PRECISION)
       
       // If the initial order was successful, place a trailing stop for profit protection
       if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
@@ -184,13 +189,14 @@ export async function executeTradeStrategy() {
           // Place the trailing stop order (same size as main position)
           trailingStopResult = await placeOrder(
             direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
-            POSITION_SIZE,
+            calculatedPositionSize, // Use the calculated position size, not the risk percentage
             trailingStopConfig,
             { type: 'none', price: 0 },
             TRADING_PAIR,
             true, // reduceOnly = true for stop loss
             'ethquake',
-            'fixed' // Use fixed size for trailing stop since position is already open
+            'fixed', // Use fixed size for trailing stop since position is already open
+            POSITION_SIZE_PRECISION
           )
           
           if (trailingStopResult?.stopOrder?.result === 'success') {

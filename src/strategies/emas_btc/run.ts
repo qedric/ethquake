@@ -25,6 +25,7 @@ const TR_PCT = config.risk_management.trailing_stop.percentage
 // trading config
 const POSITION_SIZE = config.trading.position_size
 const POSITION_SIZE_TYPE = config.trading.position_size_type || 'fixed'
+const POSITION_SIZE_PRECISION = config.trading.position_size_precision || 4
 const TRADING_PAIR = config.trading.symbol
 const TIMEFRAME = config.trading.timeframe
 
@@ -289,7 +290,7 @@ export async function runPipelineTask() {
   if (longSignal) {
     if (inShort) {
       console.log(`[${config.name}] Closing short position at ${curr.price}`)
-      await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name, POSITION_SIZE_TYPE)
+              await placeOrder('buy', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name, POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
       currentPosition = null
       currentStopOrderId = null
       currentTakeProfitOrderId = null
@@ -307,7 +308,7 @@ export async function runPipelineTask() {
         ? { type: 'limit' as const, price: tpPriceLong }
         : { type: 'none' as const, price: 0 }
 
-      const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name, POSITION_SIZE_TYPE)
+              const result = await placeOrder('buy', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name, POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
       currentPosition = 'long'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null
@@ -319,7 +320,7 @@ export async function runPipelineTask() {
   if (shortSignal) {
     if (inLong) {
       console.log(`[${config.name}] Closing long position at ${curr.price}`)
-      await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name, POSITION_SIZE_TYPE)
+              await placeOrder('sell', POSITION_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TRADING_PAIR, true, config.name, POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
       currentPosition = null
       currentStopOrderId = null
       currentTakeProfitOrderId = null
@@ -337,7 +338,7 @@ export async function runPipelineTask() {
         ? { type: 'limit' as const, price: tpPriceShort }
         : { type: 'none' as const, price: 0 }
 
-      const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name, POSITION_SIZE_TYPE)
+              const result = await placeOrder('sell', POSITION_SIZE, stopConfig, tpConfig, TRADING_PAIR, false, config.name, POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
       currentPosition = 'short'
       entryPrice = curr.price
       currentStopOrderId = result.stopOrder?.sendStatus?.order_id || null

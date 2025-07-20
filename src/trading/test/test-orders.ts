@@ -6,11 +6,12 @@ import {
   cleanupPosition,
   replaceOrder,
   getOrderStatus,
-  cancelOrder
+  cancelOrder,
+  calculatePositionSize
 } from '../kraken.js'
 
-const TEST_SYMBOL = 'PF_SOLUSD'
-const TEST_SIZE = 0.1  // Small size for testing
+const TEST_SYMBOL = 'PF_SUIUSD'
+const TEST_SIZE = 50  // Small size for testing
 
 interface TestCase {
   name: string
@@ -492,6 +493,82 @@ const tests: TestCase[] = [
       if (await hasOpenPosition(TEST_SYMBOL)) {
         throw new Error('Position still detected after cleanup')
       }
+    }
+  },
+  {
+    name: 'Risk-based position sizing',
+    fn: async () => {
+      console.log('\nTesting risk-based position sizing...')
+      
+      // Test parameters
+      const riskPercentage = 0.5 // 0.5% risk (reduced for smaller position size)
+      const stopDistance = 1.0 // 1% stop distance (reduced for smaller position size)
+      
+      console.log(`Risk: ${riskPercentage}% of account`)
+      console.log(`Stop distance: ${stopDistance}%`)
+      
+      // Get current price and account balance for debugging
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      console.log(`Current price: $${currentPrice.toFixed(2)}`)
+      
+      // Calculate position size using risk-based sizing
+      const calculatedSize = await calculatePositionSize(riskPercentage, 'risk', TEST_SYMBOL, stopDistance, 0) // SUI uses 0 decimal places
+      console.log(`Calculated position size: ${calculatedSize} units (type: ${typeof calculatedSize})`)
+      console.log(`Calculated position size as integer: ${Math.round(calculatedSize)} units`)
+      
+      // Show what the order would look like
+      const orderValue = calculatedSize * currentPrice
+      const maxLoss = calculatedSize * (currentPrice * stopDistance / 100)
+      console.log(`Order value: $${orderValue.toFixed(2)}`)
+      console.log(`Max loss if stop hit: $${maxLoss.toFixed(2)} (${riskPercentage}% of account)`)
+      
+      // Check if position size is reasonable
+      if (calculatedSize > 100) {
+        console.log(`⚠️  WARNING: Position size (${calculatedSize}) seems very large. Consider reducing risk percentage or increasing stop distance.`)
+      }
+      
+      // Place a small test order with risk-based sizing
+      const result = await placeOrder(
+        'buy',
+        riskPercentage, // This will be interpreted as risk percentage
+        { type: 'fixed', distance: stopDistance, stopPrice: currentPrice * (1 - stopDistance / 100) },
+        { type: 'none', price: 0 },
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'risk', // Use risk-based sizing
+        0 // SUI uses 0 decimal places
+      )
+      
+      if (!result.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place risk-based order')
+      }
+      
+      console.log('Risk-based order placed successfully')
+      console.log('Market order ID:', result.marketOrder.sendStatus.order_id)
+      
+      if (result.stopOrder?.sendStatus?.order_id) {
+        console.log('Stop order ID:', result.stopOrder.sendStatus.order_id)
+      }
+      
+      // Wait for order execution
+      console.log('\nWaiting for order execution...')
+      if (!await waitForOrderExecution(result.marketOrder.sendStatus.order_id, false)) {
+        throw new Error('Order execution timeout')
+      }
+      console.log('Order executed successfully')
+      
+      // Verify position
+      console.log('\nVerifying position...')
+      if (!await waitForPosition(TEST_SYMBOL, true)) {
+        throw new Error('Position not detected after multiple attempts')
+      }
+      console.log('Position verified')
+      
+      // Clean up
+      console.log('\nCleaning up position...')
+      await cleanupPosition(TEST_SYMBOL)
+      console.log('Position cleaned up')
     }
   },
   {
