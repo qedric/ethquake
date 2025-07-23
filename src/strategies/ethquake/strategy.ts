@@ -1,5 +1,5 @@
 import { getDb } from '../../lib/mongodb.js'
-import { placeOrder, getCurrentPrice, calculatePositionSize } from '../../trading/kraken.js'
+import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, placeStandaloneOrder } from '../../trading/kraken.js'
 import { getEMAs } from '../../trading/indicators.js'
 import { sendAlert } from '../../alerts/index.js'
 
@@ -37,7 +37,7 @@ export async function executeTradeStrategy() {
     // First try to get the database
     let db = null
     let connectionAttempts = 0
-    
+
     while (connectionAttempts < MAX_CONNECTION_ATTEMPTS) {
       try {
         connectionAttempts++
@@ -57,7 +57,7 @@ export async function executeTradeStrategy() {
     if (!db) {
       throw new Error('Failed to connect to database')
     }
-    
+
     // Instead of time-based query, get the two most recent records directly
     const recentResults = await db.collection('transactions_per_hour')
       .find({})
@@ -69,12 +69,12 @@ export async function executeTradeStrategy() {
     recentResults.sort((a: any, b: any) => a.timestamp - b.timestamp)
 
     console.log('[Strategy: ethquake] recent results:', recentResults)
-    
+
     if (recentResults.length < 2) {
       console.log('[Strategy: ethquake] Not enough analysis data to make trading decisions')
       return
     }
-    
+
     // Check if most recent record was updated within last 30 minutes
     const mostRecentRecord = recentResults[1]
     const fifteenMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
@@ -83,30 +83,30 @@ export async function executeTradeStrategy() {
       console.log('[Strategy: ethquake] Most recent record is too old:', mostRecentRecord.updated_at)
       return
     }
-    
+
     // Check for signal - two consecutive hours with counts over 20
     let signalDetected = false
     let signalHour = null
-    
+
     for (let i = 1; i < recentResults.length; i++) {
-      if ((recentResults[i].count + recentResults[i-1].count) >= SIGNAL_THRESHOLD) {
+      if ((recentResults[i].count + recentResults[i - 1].count) >= SIGNAL_THRESHOLD) {
         signalDetected = true
         signalHour = recentResults[i].timestamp
         break
       }
     }
-    
+
     if (!signalDetected) {
       console.log('No trading signal detected in recent data')
       return recentResults
     }
-    
+
     console.log(`Signal detected at ${signalHour.toISOString()}`)
 
     // Get technical indicators to determine direction
     const [indicators] = await getEMAs('ETHUSD', 15, [20, 50, 100]) // Get just current candle
     const { price, ema20, ema50, ema100 } = indicators
-    
+
     // Determine trade direction based on EMAs
     type Direction = 'buy' | 'sell' | 'none'
     let direction: Direction = 'none'
@@ -115,7 +115,7 @@ export async function executeTradeStrategy() {
     console.log('[Strategy: ethquake] ema20:', ema20)
     console.log('[Strategy: ethquake] ema50:', ema50)
     console.log('[Strategy: ethquake] ema100:', ema100)
-    
+
     // New direction logic using price and three EMAs
     if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
       direction = 'buy'
@@ -124,25 +124,25 @@ export async function executeTradeStrategy() {
     }
 
     // Check for threshold breach and alert regardless other conditions
-    if (recentResults[recentResults.length-1].count >= ALERT_THRESHOLD) {
-      console.log(`[Strategy: ethquake] Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
-      sendAlert(`Alert threshold triggered: ${recentResults[recentResults.length-1].count} - Direction: ${direction}`)
+    if (recentResults[recentResults.length - 1].count >= ALERT_THRESHOLD) {
+      console.log(`[Strategy: ethquake] Alert threshold triggered: ${recentResults[recentResults.length - 1].count} - Direction: ${direction}`)
+      sendAlert(`Alert threshold triggered: ${recentResults[recentResults.length - 1].count} - Direction: ${direction}`)
     }
-    
+
     if (direction === 'none') {
       console.log('[Strategy: ethquake] No clear direction from technical indicators, not trading')
       sendAlert('Signal detected - no clear direction - not trading.')
       return
     }
 
-     // Check for any trades within cooldown period
-     const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
-     const recentTrades = await db.collection('trading_signals')
-       .find({
-         created_at: { $gte: cooldownStart }
-       })
-       .toArray()
-    
+    // Check for any trades within cooldown period
+    const cooldownStart = new Date(Date.now() - (COOLDOWN_HOURS * 60 * 60 * 1000))
+    const recentTrades = await db.collection('trading_signals')
+      .find({
+        created_at: { $gte: cooldownStart }
+      })
+      .toArray()
+
 
     if (recentTrades.length > 0) {
       console.log(`[Strategy: ethquake] Found ${recentTrades.length} trades within cooldown period of ${COOLDOWN_HOURS} hours. Skipping new trades.`)
@@ -155,51 +155,44 @@ export async function executeTradeStrategy() {
     let trailingStopResult = null
     if (direction === 'buy' || direction === 'sell') {
       console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
-      
+
       // Calculate the fixed stop price for risk sizing
       const currentPrice = await getCurrentPrice(TRADING_PAIR)
-      const fixedStopPrice = roundPrice(direction === 'buy' 
+      const fixedStopPrice = roundPrice(direction === 'buy'
         ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
         : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
       )
-      
-      const fixedStopConfig = { 
-        type: 'fixed' as const, 
-        distance: FIXED_STOP_DISTANCE, 
-        stopPrice: fixedStopPrice 
+
+      const fixedStopConfig = {
+        type: 'fixed' as const,
+        distance: FIXED_STOP_DISTANCE,
+        stopPrice: fixedStopPrice
       }
-      
+
       // Calculate the position size first (this will be the same for both market order and trailing stop)
       const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
       console.log(`[Strategy: ethquake] Calculated position size: ${calculatedPositionSize} units`)
 
       // Place order with fixed stop (this determines position size based on 2% risk)
-      orderResult = await placeOrder(direction, calculatedPositionSize, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', 'fixed', POSITION_SIZE_PRECISION)
-      
+      orderResult = await placeOrderWithExits(direction, calculatedPositionSize, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', 'fixed', POSITION_SIZE_PRECISION)
+
       // If the initial order was successful, place a trailing stop for profit protection
       if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
         console.log(`[Strategy: ethquake] Initial order successful, placing trailing stop for profit protection at ${TRAILING_STOP_DISTANCE}%`)
-        
+
         try {
-          const trailingStopConfig = { 
-            type: 'trailing' as const, 
-            distance: TRAILING_STOP_DISTANCE 
-          }
-          
+
           // Place the trailing stop order (same size as main position)
-          trailingStopResult = await placeOrder(
+          trailingStopResult = await placeStandaloneOrder(
+            'trailing_stop',
             direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
-            calculatedPositionSize, // Use the calculated position size, not the risk percentage
-            trailingStopConfig,
-            { type: 'none', price: 0 },
+            calculatedPositionSize,
             TRADING_PAIR,
-            true, // reduceOnly = true for stop loss
-            'ethquake',
-            'fixed', // Use fixed size for trailing stop since position is already open
-            POSITION_SIZE_PRECISION
+            { distance: TRAILING_STOP_DISTANCE, deviationUnit: 'PERCENT' },
+            true // reduceOnly
           )
-          
-          if (trailingStopResult?.stopOrder?.result === 'success') {
+
+          if (trailingStopResult?.result === 'success') {
             console.log(`[Strategy: ethquake] Trailing stop placed successfully at ${TRAILING_STOP_DISTANCE}%`)
           } else {
             console.error('[Strategy: ethquake] Failed to place trailing stop:', trailingStopResult?.error)
@@ -220,25 +213,25 @@ export async function executeTradeStrategy() {
       market_order_status: orderResult?.marketOrder?.sendStatus?.status || 'failed',
       fixed_stop_order_id: orderResult?.stopOrder?.sendStatus?.order_id || null,
       fixed_stop_status: orderResult?.stopOrder?.sendStatus?.status || 'failed',
-      trailing_stop_order_id: trailingStopResult?.stopOrder?.sendStatus?.order_id || null,
-      trailing_stop_status: trailingStopResult?.stopOrder?.sendStatus?.status || 'failed',
+      trailing_stop_order_id: trailingStopResult?.sendStatus?.order_id || null,
+      trailing_stop_status: trailingStopResult?.sendStatus?.status || 'failed',
       result: orderResult?.marketOrder?.result || 'failed',
       error: orderResult?.error || null
     })
 
-    const trailingStopInfo = trailingStopResult?.stopOrder?.result === 'success' 
-      ? `\nTrailing Stop: ${trailingStopResult.stopOrder.sendStatus.status}` 
+    const trailingStopInfo = trailingStopResult?.result === 'success'
+      ? `\nTrailing Stop: ${trailingStopResult.sendStatus.status}`
       : '\nTrailing Stop: failed'
-    
+
     sendAlert(`Signal detected - Entered ${direction} order based on signal at ${signalHour.toISOString()}\nOrder Result: ${orderResult?.marketOrder?.result || 'failed'}\nFixed Stop Order Result: ${orderResult?.stopOrder?.sendStatus?.status || 'failed'}${trailingStopInfo}`)
-    
+
     return {
       signalHour,
       direction,
       orderResult,
       trailingStopResult
     }
-    
+
   } catch (error) {
     console.error('[Strategy: ethquake] Error executing trading strategy:', error)
     throw error

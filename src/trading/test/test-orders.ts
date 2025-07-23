@@ -1,5 +1,5 @@
 import { 
-  placeOrder, 
+  placeOrderWithExits, 
   getCurrentPrice, 
   getOpenPositions, 
   hasOpenPosition,
@@ -108,7 +108,7 @@ const tests: TestCase[] = [
     fn: async () => {
       // Open long position
       console.log('\nPlacing long market order...')
-      const longResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
+      const longResult = await placeOrderWithExits('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       if (!longResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place long market order')
       }
@@ -131,7 +131,7 @@ const tests: TestCase[] = [
       
       // Close long position
       console.log('\nClosing long position...')
-      const closeLongResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
+      const closeLongResult = await placeOrderWithExits('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
       if (!closeLongResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place closing sell order')
       }
@@ -156,7 +156,7 @@ const tests: TestCase[] = [
       
       // Open short position
       console.log('\nPlacing short market order...')
-      const shortResult = await placeOrder('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
+      const shortResult = await placeOrderWithExits('sell', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       if (!shortResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place short market order')
       }
@@ -179,7 +179,7 @@ const tests: TestCase[] = [
       
       // Close short position
       console.log('\nClosing short position...')
-      const closeShortResult = await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
+      const closeShortResult = await placeOrderWithExits('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, true, undefined, 'fixed')
       if (!closeShortResult.marketOrder?.sendStatus?.order_id) {
         throw new Error('Failed to place closing buy order')
       }
@@ -216,7 +216,7 @@ const tests: TestCase[] = [
       console.log('Take profit price:', takeProfitPrice)
       
       // Place the order with stop loss and take profit
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'buy',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: stopLossPrice },
@@ -294,7 +294,7 @@ const tests: TestCase[] = [
       console.log('Take profit price:', takeProfitPrice)
 
       // Place short with both SL and TP
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'sell',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice },
@@ -326,7 +326,7 @@ const tests: TestCase[] = [
       const trailDistance = 1  // 1% trailing distance
 
       // Place long with trailing stop
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'buy',
         TEST_SIZE,
         { type: 'trailing', distance: trailDistance },
@@ -361,7 +361,7 @@ const tests: TestCase[] = [
       const trailDistance = 1  // 1% trailing distance
 
       // Place short with trailing stop
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'sell',
         TEST_SIZE,
         { type: 'trailing', distance: trailDistance },
@@ -402,7 +402,7 @@ const tests: TestCase[] = [
       console.log('New stop/tp:', newStopPrice, newTpPrice)
 
       // Place initial position with both stop and take profit
-      const initialResult = await placeOrder(
+      const initialResult = await placeOrderWithExits(
         'buy',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: initialStopPrice },
@@ -476,7 +476,7 @@ const tests: TestCase[] = [
     name: 'Position cleanup and verification',
     fn: async () => {
       // Open a position
-      await placeOrder('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
+      await placeOrderWithExits('buy', TEST_SIZE, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, TEST_SYMBOL, false, undefined, 'fixed')
       
       // Verify it exists
       if (!await hasOpenPosition(TEST_SYMBOL)) {
@@ -528,7 +528,7 @@ const tests: TestCase[] = [
       }
       
       // Place a small test order with risk-based sizing
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'buy',
         riskPercentage, // This will be interpreted as risk percentage
         { type: 'fixed', distance: stopDistance, stopPrice: currentPrice * (1 - stopDistance / 100) },
@@ -581,7 +581,7 @@ const tests: TestCase[] = [
       console.log('Far stop price:', farStopPrice)
 
       // Place a stop order
-      const result = await placeOrder(
+      const result = await placeOrderWithExits(
         'buy',
         TEST_SIZE,
         { type: 'fixed', distance: 0, stopPrice: farStopPrice },

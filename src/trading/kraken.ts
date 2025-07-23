@@ -423,7 +423,7 @@ interface OrderResponse {
 /**
  * Places an order on Kraken Futures with verification
  */
-export async function placeOrder(
+export async function placeOrderWithExits(
   side: 'buy' | 'sell',
   size: number,
   stopConfig: StopConfig = { type: 'none', distance: 0 },
@@ -432,7 +432,8 @@ export async function placeOrder(
   reduceOnly: boolean = false,
   strategyId?: string, // Added strategyId parameter
   positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed', // Added position size type parameter
-  precision?: number // Decimal places for position size rounding
+  precision?: number, // Decimal places for position size rounding
+  noDB: boolean = false // If true, skip all DB logic
 ): Promise<OrderResponse> {
   if (!API_KEY || !API_SECRET) {
     throw new Error('Kraken API credentials not configured')
@@ -506,7 +507,7 @@ export async function placeOrder(
       if (marketOrderId) orderIds.push(marketOrderId)
 
       // Create position record if this is an opening trade (not reduceOnly)
-      if (!reduceOnly && strategyId && marketOrderId) {  // Add null check for marketOrderId
+      if (!reduceOnly && strategyId && marketOrderId && !noDB) {  // Add null check for marketOrderId
         const position: Omit<Position, '_id'> = {
           strategyId,
           symbol,
@@ -546,7 +547,7 @@ export async function placeOrder(
         }
 
         // Update position with executed market order status
-        if (positionId) {
+        if (positionId && !noDB) {
           await updateOrderStatus(positionId, 'entry', 'FULLY_EXECUTED')
         }
       }
@@ -562,7 +563,7 @@ export async function placeOrder(
           orderIds.push(stopOrderId)
           
           // Update position with stop order if we're tracking it
-          if (positionId) {
+          if (positionId && !noDB) {
             const position = await getPosition(positionId)
             if (position) {
               await updatePosition(positionId, {
@@ -601,7 +602,7 @@ export async function placeOrder(
           }
 
           // Update position with verified stop order status
-          if (positionId) {
+          if (positionId && !noDB) {
             await updateOrderStatus(positionId, 'stopLoss', 'TRIGGER_PLACED')
           }
         }
@@ -618,7 +619,7 @@ export async function placeOrder(
           orderIds.push(takeProfitOrderId)
           
           // Update position with take profit order if we're tracking it
-          if (positionId) {
+          if (positionId && !noDB) {
             const position = await getPosition(positionId)
             if (position) {
               await updatePosition(positionId, {
@@ -654,7 +655,7 @@ export async function placeOrder(
           }
 
           // Update position with verified take profit order status
-          if (positionId) {
+          if (positionId && !noDB) {
             await updateOrderStatus(positionId, 'takeProfit', 'TRIGGER_PLACED')
           }
         }
@@ -698,6 +699,45 @@ export async function placeOrder(
       positionId: undefined
     }
   }
+}
+
+/**
+ * Places a standalone stop, trailing stop, or take profit order (no market order, no DB logic)
+ */
+export async function placeStandaloneOrder(
+  orderType: 'stp' | 'trailing_stop' | 'take_profit',
+  side: 'buy' | 'sell',
+  size: number,
+  symbol: string,
+  config: {
+    stopPrice?: number,
+    distance?: number,
+    deviationUnit?: 'PERCENT',
+  } = {},
+  reduceOnly: boolean = true
+) {
+  let orderData: any = {
+    orderType,
+    symbol,
+    side: side.toLowerCase(),
+    size,
+    reduceOnly,
+    triggerSignal: 'mark'
+  }
+  if (orderType === 'stp' && config.stopPrice !== undefined) {
+    orderData.stopPrice = roundPrice(config.stopPrice)
+  }
+  if (orderType === 'trailing_stop' && config.distance !== undefined) {
+    orderData.trailingStopDeviationUnit = config.deviationUnit || 'PERCENT'
+    orderData.trailingStopMaxDeviation = config.distance
+  }
+  if (orderType === 'take_profit' && config.stopPrice !== undefined) {
+    orderData.stopPrice = roundPrice(config.stopPrice)
+  }
+  console.log('[StandaloneOrder] Placing order:', orderData)
+  const result = await sendOrder(orderData)
+  console.log('[StandaloneOrder] Result:', result.data)
+  return result.data
 }
 
 export async function getOpenPositions() {
@@ -821,7 +861,7 @@ export async function cleanupPosition(symbol: string, strategyId?: string): Prom
     const side = position.side === 'long' ? 'sell' : 'buy'
     const size = Math.abs(position.size)
     
-    const result = await placeOrder(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true, strategyId, 'fixed')
+    const result = await placeOrderWithExits(side, size, { type: 'none', distance: 0 }, { type: 'none', price: 0 }, symbol, true, strategyId, 'fixed')
     
     if (result.marketOrder?.result !== 'success') {
       throw new Error('Failed to close position')
