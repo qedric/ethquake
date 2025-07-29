@@ -11,10 +11,14 @@
         "timeframe": 15
     },
     "indicators": {
-        "ema_fast": 16,
+        "ema_fast": 18,
         "ema_mid_1": 50,
         "ema_mid_2": 100,
-        "ema_slow": 200
+        "ema_slow": 200,
+        "ema_sentiment": {
+            "enabled": true,
+            "length": 600
+        }
     },
     "risk_management": {
         "take_profit": {
@@ -22,11 +26,11 @@
             "percentage": 10.0
         },
         "stop_loss": {
-            "enabled": false,
-            "percentage": 3.0
+            "enabled": true,
+            "percentage": 5.0
         },
         "trailing_stop": {
-            "enabled": true,
+            "enabled": false,
             "percentage": 5.0
         }
     }
