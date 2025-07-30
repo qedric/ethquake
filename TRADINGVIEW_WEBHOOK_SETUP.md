@@ -29,16 +29,23 @@ The TradingView webhook endpoint `/api/tv/alert-hook` receives trading alerts fr
 
 ## Security Measures
 
-### 1. User-Agent Validation (Recommended)
-TradingView sends webhooks with a User-Agent header containing "TradingView". This is automatically validated.
+### 1. IP Whitelist (Primary Security)
+The webhook only accepts requests from TradingView's official IP addresses:
+- `52.89.214.238`
+- `34.212.75.30`
+- `54.218.53.128`
+- `52.32.178.7`
 
-### 2. Secret Token in Message
+### 2. Secret Token in Message (Additional Security)
 Include a secret token in your alert message and set the environment variable:
 ```bash
 TRADINGVIEW_WEBHOOK_SECRET=your_secret_token_here
 ```
 
-### 3. Timestamp Validation (Replay Attack Prevention)
+### 3. User-Agent Validation (Fallback)
+TradingView sends webhooks with a User-Agent header containing "TradingView". This is validated as a fallback when no secret is configured.
+
+### 4. Timestamp Validation (Replay Attack Prevention)
 All webhook requests must include a `timestamp` field. Requests older than 5 minutes are rejected to prevent replay attacks.
 
 ## TradingView Pine Script Setup
@@ -73,9 +80,9 @@ if shortCondition
   "strategy": {
     "order": {
       "action": "{{strategy.order.action}}",
-      "contracts": {{strategy.order.contracts}}
+      "contracts": "{{strategy.order.contracts}}"
     },
-    "position_size": {{strategy.position_size}}
+    "position_size": "{{strategy.position_size}}"
   },
   "ticker": "{{ticker}}",
   "message": "{{strategy.order.action}} {{strategy.order.contracts}} contracts on {{ticker}}"

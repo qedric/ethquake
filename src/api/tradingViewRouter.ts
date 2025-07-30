@@ -35,7 +35,21 @@ async function storeAlert(alert: TradingViewAlert) {
 function validateTradingViewRequest(req: express.Request): boolean {
   const webhookSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET
   
-  // If no secret is configured, only validate User-Agent
+  // Method 1: Check IP whitelist (TradingView's official IPs)
+  const clientIP = req.ip || req.connection.remoteAddress
+  const allowedIPs = [
+    '52.89.214.238',
+    '34.212.75.30', 
+    '54.218.53.128',
+    '52.32.178.7'
+  ]
+  
+  if (clientIP && allowedIPs.includes(clientIP)) {
+    console.log('Validated TradingView IP address:', clientIP)
+    return true
+  }
+  
+  // Method 2: Check User-Agent (if no secret configured)
   if (!webhookSecret) {
     const userAgent = req.headers['user-agent'] as string
     if (userAgent && userAgent.includes('TradingView')) {
@@ -46,13 +60,13 @@ function validateTradingViewRequest(req: express.Request): boolean {
     return true
   }
   
-  // If secret is configured, require it in the message
+  // Method 3: Check for secret token in message
   if (req.body.message && req.body.message.includes(webhookSecret)) {
     console.log('Validated secret token in message')
     return true
   }
   
-  console.warn('TradingView validation failed - secret token not found in message')
+  console.warn('TradingView validation failed - IP not whitelisted and secret token not found in message')
   return false
 }
 
