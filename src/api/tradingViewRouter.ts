@@ -1,5 +1,6 @@
 import express from 'express'
 import { getDb } from '../lib/mongodb.js'
+import { executeTradingViewTrade } from '../trading/webhooks.js'
 
 const router = express.Router()
 
@@ -130,24 +131,31 @@ router.post('/alert-hook', (req, res) => {
   }
   
   // Store the alert
-  storeAlert(alert).then(() => {
+  storeAlert(alert).then(async () => {
     // Process the alert based on the action
     const action = alert.strategy.order.action.toLowerCase()
     const ticker = alert.ticker
-    const contracts = alert.strategy.order.contracts
     
-    console.log(`Processing ${action} order for ${contracts} contracts on ${ticker}`)
+    console.log(`Processing ${action} order for ${ticker}`)
     
-    // TODO: Implement actual trading logic here
-    // This would integrate with your existing trading infrastructure
-    
-    res.status(200).json({ 
-      success: true, 
-      message: 'Alert received and processed',
-      action,
-      ticker,
-      contracts
-    })
+    try {
+      // Execute the trade using our webhook handler
+      const tradeResult = await executeTradingViewTrade(action, ticker)
+      
+      res.status(200).json({ 
+        success: true, 
+        message: 'Alert received and trade executed',
+        action,
+        ticker,
+        tradeResult
+      })
+    } catch (tradeError) {
+      console.error('Error executing trade:', tradeError)
+      res.status(500).json({ 
+        error: 'Trade execution failed',
+        details: tradeError instanceof Error ? tradeError.message : String(tradeError)
+      })
+    }
   }).catch((error) => {
     console.error('Error processing TradingView webhook:', error)
     res.status(500).json({ 

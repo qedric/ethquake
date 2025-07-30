@@ -1,0 +1,110 @@
+import { placeOrderWithExits, getCurrentPrice, calculatePositionSize } from './kraken.js'
+import { sendAlert } from '../alerts/index.js'
+
+// Helper function to round price to 2 decimal places (same as in kraken.ts)
+function roundPrice(price: number): number {
+  return Math.round(price * 100) / 100
+}
+
+const POSITION_SIZE = 0.5 // % of account risked
+const POSITION_SIZE_PRECISION = 3 // decimal places for position size rounding
+const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
+const POSITION_SIZE_TYPE = 'risk'
+
+/**
+ * Executes a trade based on TradingView webhook signal
+ * Uses risk-based position sizing with a 7% fixed stop as safety fallback
+ */
+export async function executeTradingViewTrade(action: string, ticker: string): Promise<any> {
+  try {
+    console.log(`[TradingView Webhook] Processing ${action} order for ${ticker}`)
+
+    // Validate action
+    const direction = action.toLowerCase()
+    if (direction !== 'buy' && direction !== 'sell') {
+      throw new Error(`Invalid action: ${action}. Must be 'buy' or 'sell'`)
+    }
+
+    // Map ticker to Kraken trading pair if needed
+    const tradingPair = mapTickerToTradingPair(ticker)
+    console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
+
+    // Calculate position size based on risk
+    const calculatedPositionSize = await calculatePositionSize(
+      POSITION_SIZE, 
+      POSITION_SIZE_TYPE, 
+      tradingPair, 
+      FIXED_STOP_DISTANCE, 
+      POSITION_SIZE_PRECISION
+    )
+    console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
+
+    // Calculate the fixed stop price for risk sizing
+    const currentPrice = await getCurrentPrice(tradingPair)
+    const fixedStopPrice = roundPrice(direction === 'buy'
+      ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
+      : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
+    )
+
+    const fixedStopConfig = {
+      type: 'fixed' as const,
+      distance: FIXED_STOP_DISTANCE,
+      stopPrice: fixedStopPrice
+    }
+
+    // Place order with fixed stop (no take profit - rely on TradingView exit webhook)
+    const orderResult = await placeOrderWithExits(
+      direction, 
+      calculatedPositionSize, 
+      fixedStopConfig, 
+      { type: 'none', price: 0 }, // No take profit
+      tradingPair, 
+      false, 
+      'tradingview_webhook', 
+      'fixed', 
+      POSITION_SIZE_PRECISION
+    )
+
+    // Send alert about the trade
+    const orderStatus = orderResult?.marketOrder?.result || 'failed'
+    const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
+    
+    sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
+
+    console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
+    return {
+      success: orderStatus === 'success',
+      direction,
+      ticker,
+      tradingPair,
+      positionSize: calculatedPositionSize,
+      orderResult
+    }
+
+  } catch (error) {
+    console.error('[TradingView Webhook] Error executing trade:', error)
+    sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}`)
+    throw error
+  }
+}
+
+/**
+ * Maps common ticker symbols to Kraken trading pairs
+ */
+function mapTickerToTradingPair(ticker: string): string {
+  const tickerUpper = ticker.toUpperCase()
+  
+  // Common mappings
+  const mappings: { [key: string]: string } = {
+    'ETHUSD': 'PF_ETHUSD',
+    'ETH/USD': 'PF_ETHUSD',
+    'BTCUSD': 'PF_BTCUSD', 
+    'BTC/USD': 'PF_BTCUSD',
+    'SOLUSD': 'PF_SOLUSD',
+    'SOL/USD': 'PF_SOLUSD',
+    'SUIUSD': 'PF_SUIUSD',
+    'SUI/USD': 'PF_SUIUSD',
+  }
+
+  return mappings[tickerUpper] || tickerUpper
+}
