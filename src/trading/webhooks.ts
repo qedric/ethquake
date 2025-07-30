@@ -14,15 +14,46 @@ const POSITION_SIZE_TYPE = 'risk'
 /**
  * Executes a trade based on TradingView webhook signal
  * Uses risk-based position sizing with a 7% fixed stop as safety fallback
+ * Handles position changes intelligently based on current and previous positions
  */
-export async function executeTradingViewTrade(action: string, ticker: string): Promise<any> {
+export async function executeTradingViewTrade(
+  action: string, 
+  ticker: string, 
+  currentPosition: string, 
+  prevPosition: string
+): Promise<any> {
   try {
     console.log(`[TradingView Webhook] Processing ${action} order for ${ticker}`)
+    console.log(`[TradingView Webhook] Position change: ${prevPosition} -> ${currentPosition}`)
 
     // Validate action
     const direction = action.toLowerCase()
     if (direction !== 'buy' && direction !== 'sell') {
       throw new Error(`Invalid action: ${action}. Must be 'buy' or 'sell'`)
+    }
+
+    // Validate positions
+    const validPositions = ['long', 'short', 'flat']
+    if (!validPositions.includes(currentPosition) || !validPositions.includes(prevPosition)) {
+      throw new Error(`Invalid position values: current=${currentPosition}, prev=${prevPosition}. Must be 'long', 'short', or 'flat'`)
+    }
+
+    // Determine the type of position change
+    const positionChange = determinePositionChange(prevPosition, currentPosition)
+    console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${prevPosition} to ${currentPosition} based on ${direction} signal`)
+
+    // Skip if this is just a position close (no new position to enter)
+    if (positionChange === 'close_only') {
+      console.log('[TradingView Webhook] Skipping trade - position close only')
+      sendAlert(`TradingView position close detected for ${ticker}: ${prevPosition} -> ${currentPosition}`)
+      return {
+        success: true,
+        direction,
+        ticker,
+        action: 'position_close',
+        positionChange: `${prevPosition} -> ${currentPosition}`,
+        message: 'Position close detected - no new trade needed'
+      }
     }
 
     // Map ticker to Kraken trading pair if needed
@@ -69,7 +100,7 @@ export async function executeTradingViewTrade(action: string, ticker: string): P
     const orderStatus = orderResult?.marketOrder?.result || 'failed'
     const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
     
-    sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
+    sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${prevPosition} -> ${currentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
 
     console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
     return {
@@ -78,6 +109,8 @@ export async function executeTradingViewTrade(action: string, ticker: string): P
       ticker,
       tradingPair,
       positionSize: calculatedPositionSize,
+      positionChange: `${prevPosition} -> ${currentPosition}`,
+      changeType: positionChange,
       orderResult
     }
 
@@ -86,6 +119,36 @@ export async function executeTradingViewTrade(action: string, ticker: string): P
     sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}`)
     throw error
   }
+}
+
+/**
+ * Determines the type of position change based on previous and current positions
+ * Returns: 'new_position', 'reverse_position', 'close_only', or 'no_change'
+ */
+function determinePositionChange(prevPosition: string, currentPosition: string): string {
+  // No change in position
+  if (prevPosition === currentPosition) {
+    return 'no_change'
+  }
+
+  // Position close (going to flat)
+  if (currentPosition === 'flat') {
+    return 'close_only'
+  }
+
+  // New position (from flat to long/short)
+  if (prevPosition === 'flat') {
+    return 'new_position'
+  }
+
+  // Reverse position (long to short or short to long)
+  if ((prevPosition === 'long' && currentPosition === 'short') || 
+      (prevPosition === 'short' && currentPosition === 'long')) {
+    return 'reverse_position'
+  }
+
+  // Shouldn't reach here, but just in case
+  return 'unknown'
 }
 
 /**

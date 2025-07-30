@@ -19,13 +19,28 @@ The TradingView webhook endpoint `/api/tv/alert-hook` receives trading alerts fr
       "action": "buy|sell",
       "contracts": 1
     },
-    "position_size": 1
+    "current_position": "long|short|flat",
+    "prev_position": "long|short|flat"
   },
   "ticker": "ETHUSD",
   "message": "Your alert message here",
   "timestamp": "2025-07-30T09:38:03.922Z" // Optional
 }
 ```
+
+### Position Tracking
+
+The webhook uses position tracking to intelligently handle different types of position changes:
+
+- **`current_position`**: The strategy's current position ("long", "short", or "flat")
+- **`prev_position`**: The strategy's previous position ("long", "short", or "flat")
+
+This allows the system to distinguish between:
+- **New Position**: `prev_position: "flat"` → `current_position: "long"` or `"short"`
+- **Position Close**: `prev_position: "long"` or `"short"` → `current_position: "flat"`
+- **Position Reverse**: `prev_position: "long"` → `current_position: "short"` (or vice versa)
+
+Position closes are detected and logged but don't trigger new trades, as the system relies on TradingView's exit signals for position management.
 
 ## Security Measures
 
@@ -82,10 +97,11 @@ if shortCondition
       "action": "{{strategy.order.action}}",
       "contracts": "{{strategy.order.contracts}}"
     },
-    "position_size": "{{strategy.position_size}}"
+    "current_position": "{{strategy.market_position}}",
+    "prev_position": "{{strategy.prev_market_position}}"
   },
   "ticker": "{{ticker}}",
-  "message": "{{strategy.order.action}} {{strategy.order.contracts}} contracts on {{ticker}}"
+  "message": "{{strategy.order.action}} on {{ticker}}"
 }
 ```
 
@@ -93,17 +109,48 @@ if shortCondition
 
 ### Test with curl
 ```bash
-# Test with User-Agent validation and timestamp
+# Test new position entry
 curl -X POST http://localhost:8080/api/tv/alert-hook \
   -H "Content-Type: application/json" \
   -H "User-Agent: TradingView/1.0" \
   -d '{
     "strategy": {
       "order": {"action": "buy", "contracts": 1},
-      "position_size": 1
+      "current_position": "long",
+      "prev_position": "flat"
     },
     "ticker": "ETHUSD",
-    "message": "Test alert",
+    "message": "Test alert - new long position",
+    "timestamp": "2025-07-30T09:38:03.922Z"
+  }'
+
+# Test position close (should not trigger new trade)
+curl -X POST http://localhost:8080/api/tv/alert-hook \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: TradingView/1.0" \
+  -d '{
+    "strategy": {
+      "order": {"action": "sell", "contracts": 1},
+      "current_position": "flat",
+      "prev_position": "long"
+    },
+    "ticker": "ETHUSD",
+    "message": "Test alert - closing long position",
+    "timestamp": "2025-07-30T09:38:03.922Z"
+  }'
+
+# Test position reverse
+curl -X POST http://localhost:8080/api/tv/alert-hook \
+  -H "Content-Type: application/json" \
+  -H "User-Agent: TradingView/1.0" \
+  -d '{
+    "strategy": {
+      "order": {"action": "sell", "contracts": 1},
+      "current_position": "short",
+      "prev_position": "long"
+    },
+    "ticker": "ETHUSD",
+    "message": "Test alert - reversing from long to short",
     "timestamp": "2025-07-30T09:38:03.922Z"
   }'
 
@@ -113,7 +160,8 @@ curl -X POST http://localhost:8080/api/tv/alert-hook \
   -d '{
     "strategy": {
       "order": {"action": "sell", "contracts": 2},
-      "position_size": -1
+      "current_position": "short",
+      "prev_position": "flat"
     },
     "ticker": "BTCUSD",
     "message": "Test alert with secret: your_secret_token_here",
@@ -127,7 +175,8 @@ curl -X POST http://localhost:8080/api/tv/alert-hook \
   -d '{
     "strategy": {
       "order": {"action": "buy", "contracts": 1},
-      "position_size": 1
+      "current_position": "long",
+      "prev_position": "flat"
     },
     "ticker": "ETHUSD",
     "message": "Old alert",
@@ -161,7 +210,8 @@ All webhook alerts are stored in MongoDB in the `tradingview_alerts` database un
       "action": "buy|sell",
       "contracts": 1
     },
-    "position_size": 1
+    "current_position": "long|short|flat",
+    "prev_position": "long|short|flat"
   },
   "ticker": "ETHUSD",
   "message": "Alert message",
@@ -170,6 +220,17 @@ All webhook alerts are stored in MongoDB in the `tradingview_alerts` database un
   "processed": false
 }
 ```
+
+## Position Change Logic
+
+The webhook handler intelligently processes different types of position changes:
+
+1. **New Position** (`flat` → `long`/`short`): Executes a new trade with risk-based position sizing
+2. **Position Close** (`long`/`short` → `flat`): Logs the close but doesn't execute a new trade
+3. **Position Reverse** (`long` → `short` or `short` → `long`): Executes a new trade in the opposite direction
+4. **No Change**: Logs but takes no action
+
+This prevents duplicate trades and ensures proper position management based on TradingView's strategy state.
 
 ## Next Steps
 

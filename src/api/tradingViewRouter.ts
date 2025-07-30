@@ -10,7 +10,8 @@ interface TradingViewAlert {
       action: string
       contracts: number
     }
-    position_size: number
+    current_position: string
+    prev_position: string
   }
   ticker: string
   message: string
@@ -124,29 +125,32 @@ router.post('/alert-hook', (req, res) => {
   }
   
   // Validate required fields
-  if (!alert.strategy?.order?.action || !alert.ticker) {
+  if (!alert.strategy?.order?.action || !alert.ticker || !alert.strategy?.current_position || !alert.strategy?.prev_position) {
     console.warn('Invalid TradingView alert received:', req.body)
-    res.status(400).json({ error: 'Missing required fields' })
+    res.status(400).json({ error: 'Missing required fields: action, ticker, current_position, or prev_position' })
     return
   }
   
   // Store the alert
   storeAlert(alert).then(async () => {
-    // Process the alert based on the action
+    // Process the alert based on the action and position changes
     const action = alert.strategy.order.action.toLowerCase()
     const ticker = alert.ticker
+    const currentPosition = alert.strategy.current_position.toLowerCase()
+    const prevPosition = alert.strategy.prev_position.toLowerCase()
     
-    console.log(`Processing ${action} order for ${ticker}`)
+    console.log(`Processing ${action} order for ${ticker} - Position: ${prevPosition} -> ${currentPosition}`)
     
     try {
       // Execute the trade using our webhook handler
-      const tradeResult = await executeTradingViewTrade(action, ticker)
+      const tradeResult = await executeTradingViewTrade(action, ticker, currentPosition, prevPosition)
       
       res.status(200).json({ 
         success: true, 
         message: 'Alert received and trade executed',
         action,
         ticker,
+        positionChange: `${prevPosition} -> ${currentPosition}`,
         tradeResult
       })
     } catch (tradeError) {
