@@ -2,6 +2,7 @@ import dotenv from 'dotenv'
 import transactionDataRouter from '../api/transactionData.js'
 import visualizationRouter from '../api/visualizationRouter.js'
 import strategiesRouter from '../api/strategiesRouter.js'
+import tradingViewRouter from '../api/tradingViewRouter.js'
 import path from 'path'
 import basicAuth from 'express-basic-auth'
 import express from 'express'
@@ -24,6 +25,9 @@ const authMiddleware = basicAuth({
 
 const app = express()
 const PORT = process.env.PORT || 8080
+
+// Add JSON body parser middleware
+app.use(express.json())
 
 // When running npm start, we want dist/
 // When running npm run dev, we want src/
@@ -175,16 +179,17 @@ async function startServer() {
     // Load strategies first
     await loadStrategies()
     
+    // Add the routers BEFORE starting the server
+    app.use('/api/transactions', authMiddleware, transactionDataRouter)
+    app.use('/api/tv', tradingViewRouter) // TradingView webhooks don't need auth
+    app.use(express.static(path.join(__dirname, '../public')))
+    app.use('/charts', authMiddleware, visualizationRouter)
+    app.use('/strategies', authMiddleware, strategiesRouter)
+    
     // Start Express server
     app.listen(PORT, () => {
       console.log(`Ethquake Server running on port ${PORT}.`)
     })
-
-    // Add the router with authentication
-    app.use('/api/transactions', authMiddleware, transactionDataRouter)
-    app.use(express.static(path.join(__dirname, '../public')))
-    app.use('/charts', authMiddleware, visualizationRouter)
-    app.use('/strategies', authMiddleware, strategiesRouter)
   } catch (error) {
     console.error('Failed to start server:', error)
     // Important: Don't exit on startup error, retry instead
