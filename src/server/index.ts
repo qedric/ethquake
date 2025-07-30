@@ -36,6 +36,7 @@ const STRATEGIES_DIR = isDev
 interface StrategyConfig {
   name: string
   enabled: boolean
+  enabled_dev?: boolean
   description?: string
   cronSchedule: string
 }
@@ -79,8 +80,16 @@ async function loadStrategies() {
       runPipelineTask: async () => {} // Placeholder for disabled strategies
     }
 
-    if (!config.enabled) {
-      console.log(`Strategy ${folder} is disabled in config`)
+    // Check if strategy is enabled for current environment
+    const isEnabledForEnvironment = isDev 
+      ? (config.enabled_dev === true)
+      : config.enabled
+    
+    if (!isEnabledForEnvironment) {
+      const reason = isDev && !config.enabled_dev 
+        ? 'disabled for dev mode' 
+        : 'disabled in config'
+      console.log(`Strategy ${folder} is ${reason}`)
       continue
     }
 
@@ -128,6 +137,7 @@ app.get('/status', authMiddleware, async (req, res) => {
     const strategyStatuses = Object.entries(strategies).map(([name, strategy]) => ({
       name,
       enabled: strategy.config.enabled,
+      enabled_dev: strategy.config.enabled_dev,
       schedule: strategy.config.cronSchedule,
       description: strategy.config.description
     }))

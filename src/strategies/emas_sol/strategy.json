@@ -1,6 +1,7 @@
 {
     "name": "emas_sol",
     "enabled": true,
+    "enabled_dev": false,
     "description": "EMA crossover strategy",
     "cronSchedule": "0 */15 * * * *",
     "trading": {
