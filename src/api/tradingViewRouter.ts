@@ -79,7 +79,15 @@ function validateTimestamp(req: express.Request): boolean {
 
 // TradingView webhook endpoint
 router.post('/alert-hook', (req, res) => {
-  console.log('Received TradingView webhook:', req.body)
+  // Sanitize request body for logging and storage (remove secret token)
+  const webhookSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET
+  let sanitizedBody = { ...req.body }
+  
+  if (webhookSecret && sanitizedBody.message) {
+    sanitizedBody.message = sanitizedBody.message.replace(webhookSecret, '[SECRET_REDACTED]')
+  }
+  
+  console.log('Received TradingView webhook:', sanitizedBody)
   
       // Validate TradingView request
     if (!validateTradingViewRequest(req)) {
@@ -96,7 +104,7 @@ router.post('/alert-hook', (req, res) => {
   const alert: TradingViewAlert = {
     strategy: req.body.strategy,
     ticker: req.body.ticker,
-    message: req.body.message,
+    message: sanitizedBody.message, // Use the already sanitized message
     timestamp: req.body.timestamp || new Date().toISOString()
   }
   
