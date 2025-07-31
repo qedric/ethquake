@@ -98,7 +98,7 @@ export async function executeTradingViewTrade(
 
     // Send alert about the trade
     const orderStatus = orderResult?.marketOrder?.result || 'failed'
-    const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
+    //const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
     
     //sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${prevPosition} -> ${currentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
 
