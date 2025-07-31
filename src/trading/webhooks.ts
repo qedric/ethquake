@@ -7,9 +7,23 @@ function roundPrice(price: number): number {
 }
 
 const POSITION_SIZE = 0.5 // % of account risked
-const POSITION_SIZE_PRECISION = 3 // decimal places for position size rounding
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
+
+/**
+ * Returns the correct position size precision for each trading pair
+ * Different instruments have different minimum position size requirements
+ */
+function getPositionSizePrecision(tradingPair: string): number {
+  const precisionMap: { [key: string]: number } = {
+    'PF_SUIUSD': 0,  // SUI requires whole numbers
+    'PF_SOLUSD': 2,  // SOL uses 2 decimal places
+    'PF_ETHUSD': 3,  // ETH uses 3 decimal places
+    'PF_BTCUSD': 4,  // BTC uses 4 decimal places
+  }
+  
+  return precisionMap[tradingPair] || 2 // Default to 2 decimal places
+}
 
 /**
  * Executes a trade based on TradingView webhook signal
@@ -63,14 +77,31 @@ export async function executeTradingViewTrade(
     console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
 
     // Calculate position size based on risk
-    const calculatedPositionSize = await calculatePositionSize(
+    let calculatedPositionSize = await calculatePositionSize(
       POSITION_SIZE, 
       POSITION_SIZE_TYPE, 
       tradingPair, 
       FIXED_STOP_DISTANCE, 
-      POSITION_SIZE_PRECISION
+      getPositionSizePrecision(tradingPair)
     )
     console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
+
+    // Validate minimum position size requirements
+    const minPositionSizes: { [key: string]: number } = {
+      'PF_SUIUSD': 1,    // SUI minimum 1 unit
+      'PF_SOLUSD': 0.01, // SOL minimum 0.01 units
+      'PF_ETHUSD': 0.001, // ETH minimum 0.001 units
+      'PF_BTCUSD': 0.0001, // BTC minimum 0.0001 units
+    }
+    
+    const minSize = minPositionSizes[tradingPair] || 0.01
+    if (calculatedPositionSize < minSize) {
+      console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is below minimum (${minSize}) for ${tradingPair}`)
+      console.log(`[TradingView Webhook] Using minimum position size: ${minSize} units`)
+      calculatedPositionSize = minSize
+    }
+    
+    console.log(`[TradingView Webhook] Final position size for ${tradingPair}: ${calculatedPositionSize} units (precision: ${getPositionSizePrecision(tradingPair)} decimal places)`)
 
     // Calculate the fixed stop price for risk sizing
     const currentPrice = await getCurrentPrice(tradingPair)
@@ -95,7 +126,7 @@ export async function executeTradingViewTrade(
       false, 
       'tradingview_webhook', 
       'fixed', 
-      POSITION_SIZE_PRECISION
+      getPositionSizePrecision(tradingPair)
     )
 
     // Send alert about the trade
