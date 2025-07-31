@@ -214,6 +214,7 @@ export async function calculatePositionSize(
     
     // Round to specified precision or use default
     const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
+    console.log(`[Symbol: ${symbol}] Using precision: ${precisionToUse} decimal places (passed: ${precision})`)
 
     let calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
     console.log(`[Symbol: ${symbol}] Calculated position size: ${calculatedSize} units`)

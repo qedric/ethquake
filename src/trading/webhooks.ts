@@ -22,7 +22,11 @@ function getPositionSizePrecision(tradingPair: string): number {
     'PF_BTCUSD': 4,  // BTC uses 4 decimal places
   }
   
-  return precisionMap[tradingPair] || 2 // Default to 2 decimal places
+  const precision = precisionMap[tradingPair] || 2 // Default to 2 decimal places
+  console.log(`[getPositionSizePrecision] ${tradingPair} -> ${precision} decimal places`)
+  console.log(`[getPositionSizePrecision] Debug - Available keys: ${Object.keys(precisionMap).join(', ')}`)
+  console.log(`[getPositionSizePrecision] Debug - Looking for: "${tradingPair}", found: ${Object.prototype.hasOwnProperty.call(precisionMap, tradingPair)}`)
+  return precision
 }
 
 /**
@@ -77,12 +81,16 @@ export async function executeTradingViewTrade(
     console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
 
     // Calculate position size based on risk
+    const precision = getPositionSizePrecision(tradingPair)
+    console.log(`[TradingView Webhook] Using precision: ${precision} decimal places for ${tradingPair}`)
+    console.log(`[TradingView Webhook] Debug - ticker: "${ticker}", tradingPair: "${tradingPair}", precision: ${precision}`)
+    
     let calculatedPositionSize = await calculatePositionSize(
       POSITION_SIZE, 
       POSITION_SIZE_TYPE, 
       tradingPair, 
       FIXED_STOP_DISTANCE, 
-      getPositionSizePrecision(tradingPair)
+      precision
     )
     console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
 
@@ -126,7 +134,7 @@ export async function executeTradingViewTrade(
       false, 
       'tradingview_webhook', 
       'fixed', 
-      getPositionSizePrecision(tradingPair)
+      precision
     )
 
     // Send alert about the trade
