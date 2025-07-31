@@ -162,13 +162,17 @@ function mapTickerToTradingPair(ticker: string): string {
   // Common mappings
   const mappings: { [key: string]: string } = {
     'ETHUSD': 'PF_ETHUSD',
+    'ETHUSD.PM': 'PF_ETHUSD',
     'ETH/USD': 'PF_ETHUSD',
-    'BTCUSD': 'PF_BTCUSD', 
+    'BTCUSD': 'PF_BTCUSD',
+    'BTCUSD.PM': 'PF_BTCUSD',
     'BTC/USD': 'PF_BTCUSD',
     'SOLUSD': 'PF_SOLUSD',
+    'SOLUSD.PM': 'PF_SOLUSD',
     'SOL/USD': 'PF_SOLUSD',
     'SUIUSD': 'PF_SUIUSD',
     'SUI/USD': 'PF_SUIUSD',
+    'SUIUSD.PM' : 'PF_SUIUSD',
   }
 
   return mappings[tickerUpper] || tickerUpper
