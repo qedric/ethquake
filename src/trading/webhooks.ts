@@ -22,7 +22,7 @@ function getPositionSizePrecision(tradingPair: string): number {
     'PF_BTCUSD': 4,  // BTC uses 4 decimal places
   }
   
-  const precision = precisionMap[tradingPair] || 2 // Default to 2 decimal places
+  const precision = precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
   console.log(`[getPositionSizePrecision] ${tradingPair} -> ${precision} decimal places`)
   console.log(`[getPositionSizePrecision] Debug - Available keys: ${Object.keys(precisionMap).join(', ')}`)
   console.log(`[getPositionSizePrecision] Debug - Looking for: "${tradingPair}", found: ${Object.prototype.hasOwnProperty.call(precisionMap, tradingPair)}`)
