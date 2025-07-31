@@ -26,6 +26,8 @@ function getPositionSizePrecision(tradingPair: string): number {
   console.log(`[getPositionSizePrecision] ${tradingPair} -> ${precision} decimal places`)
   console.log(`[getPositionSizePrecision] Debug - Available keys: ${Object.keys(precisionMap).join(', ')}`)
   console.log(`[getPositionSizePrecision] Debug - Looking for: "${tradingPair}", found: ${Object.prototype.hasOwnProperty.call(precisionMap, tradingPair)}`)
+  console.log(`[getPositionSizePrecision] Debug - Direct access: precisionMap["${tradingPair}"] = ${precisionMap[tradingPair]}`)
+  console.log(`[getPositionSizePrecision] Debug - Type of value: ${typeof precisionMap[tradingPair]}`)
   return precision
 }
 
@@ -84,6 +86,7 @@ export async function executeTradingViewTrade(
     const precision = getPositionSizePrecision(tradingPair)
     console.log(`[TradingView Webhook] Using precision: ${precision} decimal places for ${tradingPair}`)
     console.log(`[TradingView Webhook] Debug - ticker: "${ticker}", tradingPair: "${tradingPair}", precision: ${precision}`)
+    console.log(`[TradingView Webhook] About to call calculatePositionSize with precision: ${precision}`)
     
     let calculatedPositionSize = await calculatePositionSize(
       POSITION_SIZE, 

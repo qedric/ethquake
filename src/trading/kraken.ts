@@ -179,6 +179,7 @@ export async function calculatePositionSize(
   stopDistance?: number, // Required for risk-based sizing
   precision?: number // Decimal places for rounding
 ): Promise<number> {
+  console.log(`[calculatePositionSize] Called with precision: ${precision} for symbol: ${symbol}`)
   if (positionSizeType === 'fixed') {
     return positionSize
   }
