@@ -169,18 +169,17 @@ export async function executeTradeStrategy() {
         stopPrice: fixedStopPrice
       }
 
-      // Calculate the position size first (this will be the same for both market order and trailing stop)
-      const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
-      console.log(`[Strategy: ethquake] Calculated position size: ${calculatedPositionSize} units`)
-
       // Place order with fixed stop (this determines position size based on 2% risk)
-      orderResult = await placeOrderWithExits(direction, calculatedPositionSize, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', 'fixed', POSITION_SIZE_PRECISION)
+      orderResult = await placeOrderWithExits(direction, POSITION_SIZE, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
 
       // If the initial order was successful, place a trailing stop for profit protection
       if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
         console.log(`[Strategy: ethquake] Initial order successful, placing trailing stop for profit protection at ${TRAILING_STOP_DISTANCE}%`)
 
         try {
+          // Calculate position size for the trailing stop (same as main order)
+          const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
+          console.log(`[Strategy: ethquake] Calculated position size for trailing stop: ${calculatedPositionSize} units`)
 
           // Place the trailing stop order (same size as main position)
           trailingStopResult = await placeStandaloneOrder(

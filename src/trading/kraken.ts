@@ -311,65 +311,34 @@ export async function replaceOrder(
   stopConfig: StopConfig,
   takeProfitConfig: TakeProfitConfig,
   symbol: string,
-  isStopOrder: boolean = true, // true for stop orders, false for take profit
-  positionSizeType: 'percent' | 'fixed' | 'risk' = 'fixed', // Added position size type parameter
-  precision?: number // Decimal places for position size rounding
+  isStopOrder: boolean = true // true for stop orders, false for take profit
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
-    // Get current price for stop distance calculation
-    const currentPrice = await getCurrentPrice(symbol)
     
-    // Calculate the actual position size based on type
-    let stopDistance: number | undefined
-    let finalPositionSizeType = positionSizeType
-    let finalSize = size
-    
-    // For risk-based sizing, we need a stop distance
-    if (positionSizeType === 'risk') {
-      if (stopConfig.type !== 'none') {
-        if (stopConfig.type === 'trailing') {
-          // For trailing stops, use the trailing distance as the stop distance
-          stopDistance = stopConfig.distance
-        } else if (stopConfig.type === 'fixed') {
-          // For fixed stops, calculate the distance from current price to stop price
-          const priceDistance = Math.abs(currentPrice - stopConfig.stopPrice)
-          stopDistance = (priceDistance / currentPrice) * 100
-        }
+    // For replacing orders, we always use the existing position size
+    // This avoids recalculating position size which could lead to mismatches
+    let actualPositionSize: number
+    try {
+      const response = await getOpenPositions()
+      const positions = response.data.openPositions || []
+      const position = positions.find((pos: any) => pos.symbol === symbol)
+      if (position) {
+        actualPositionSize = position.size
+        console.log(`Using existing position size for order replacement: ${actualPositionSize}`)
       } else {
-        // If no stop config but we're using risk-based sizing, fall back to fixed sizing
-        // This happens when replacing take profit orders (which don't have stops)
-        // We need to get the actual position size from the existing position
-        finalPositionSizeType = 'fixed'
-        try {
-          const response = await getOpenPositions()
-          const positions = response.data.openPositions || []
-          const position = positions.find((pos: any) => pos.symbol === symbol)
-          if (position) {
-            finalSize = position.size
-            console.log(`No stop distance available for risk-based sizing, using existing position size: ${finalSize}`)
-          } else {
-            console.log('No stop distance available for risk-based sizing, falling back to fixed sizing with original size')
-          }
-        } catch (error) {
-          console.log('Error getting position size, falling back to fixed sizing with original size:', error)
-        }
+        throw new Error('No open position found for order replacement')
       }
+    } catch (error) {
+      console.error('Error getting position size for order replacement:', error)
+      throw new Error('Failed to get existing position size for order replacement')
     }
-    
-    const calculatedSize = await calculatePositionSize(
-      finalSize, 
-      finalPositionSizeType, 
-      symbol,
-      stopDistance,
-      precision
-    )
     
     // Create the appropriate order data based on type
     const orderData = isStopOrder && stopConfig.type === 'trailing' ? {
       orderType: 'trailing_stop',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: actualPositionSize,
       trailingStopDeviationUnit: 'PERCENT',
       trailingStopMaxDeviation: stopConfig.distance,
       reduceOnly: true,
@@ -378,7 +347,7 @@ export async function replaceOrder(
       orderType: 'stp',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: actualPositionSize,
       stopPrice: roundPrice((stopConfig as FixedStopConfig).stopPrice),
       reduceOnly: true,
       triggerSignal: 'mark'
@@ -386,7 +355,7 @@ export async function replaceOrder(
       orderType: 'take_profit',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: actualPositionSize,
       stopPrice: roundPrice(takeProfitConfig.price),
       reduceOnly: true,
       triggerSignal: 'mark'
@@ -488,32 +457,53 @@ export async function placeOrderWithExits(
     // Get current price for entry
     const currentPrice = await getCurrentPrice(symbol)
     
-    // Calculate the actual position size based on type
-    let stopDistance: number | undefined
-    if (positionSizeType === 'risk' && stopConfig.type !== 'none') {
-      if (stopConfig.type === 'trailing') {
-        // For trailing stops, use the trailing distance as the stop distance
-        stopDistance = stopConfig.distance
-      } else if (stopConfig.type === 'fixed') {
-        // For fixed stops, calculate the distance from current price to stop price
-        const priceDistance = Math.abs(currentPrice - stopConfig.stopPrice)
-        stopDistance = (priceDistance / currentPrice) * 100
-      }
-    }
+    // Determine the position size to use
+    let finalSize: number
     
-    const calculatedSize = await calculatePositionSize(
-      size, 
-      positionSizeType, 
-      symbol,
-      stopDistance,
-      precision
-    )
+    if (reduceOnly) {
+      // For closing positions (reduceOnly: true), use the actual position size from the exchange
+      try {
+        const response = await getOpenPositions()
+        const positions = response.data.openPositions || []
+        const position = positions.find((pos: any) => pos.symbol === symbol)
+        if (position) {
+          finalSize = position.size
+          console.log(`Using existing position size for closing order: ${finalSize}`)
+        } else {
+          throw new Error('No open position found for closing order')
+        }
+      } catch (error) {
+        console.error('Error getting position size for closing order:', error)
+        throw new Error('Failed to get existing position size for closing order')
+      }
+    } else {
+      // For opening positions (reduceOnly: false), calculate the position size based on type
+      let stopDistance: number | undefined
+      if (positionSizeType === 'risk' && stopConfig.type !== 'none') {
+        if (stopConfig.type === 'trailing') {
+          // For trailing stops, use the trailing distance as the stop distance
+          stopDistance = stopConfig.distance
+        } else if (stopConfig.type === 'fixed') {
+          // For fixed stops, calculate the distance from current price to stop price
+          const priceDistance = Math.abs(currentPrice - stopConfig.stopPrice)
+          stopDistance = (priceDistance / currentPrice) * 100
+        }
+      }
+      
+      finalSize = await calculatePositionSize(
+        size, 
+        positionSizeType, 
+        symbol,
+        stopDistance,
+        precision
+      )
+    }
 
     // Create the market order data
     const marketOrderData = {
       orderType: 'mkt',
       symbol: symbol,
-      size: calculatedSize,
+      size: finalSize,
       side: side.toLowerCase(),
       reduceOnly  // Use the passed reduceOnly parameter for market orders
     }
@@ -523,7 +513,7 @@ export async function placeOrderWithExits(
       orderType: 'trailing_stop',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: finalSize,
       trailingStopDeviationUnit: 'PERCENT',
       trailingStopMaxDeviation: stopConfig.distance,
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
@@ -532,7 +522,7 @@ export async function placeOrderWithExits(
       orderType: 'stp',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: finalSize,
       stopPrice: roundPrice(stopConfig.stopPrice),
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
       triggerSignal: 'mark'
@@ -543,7 +533,7 @@ export async function placeOrderWithExits(
       orderType: 'take_profit',
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
-      size: calculatedSize,
+      size: finalSize,
       stopPrice: roundPrice(takeProfitConfig.price),
       reduceOnly: true,  // Always true for take profit orders to prevent position stacking
       triggerSignal: 'mark'
@@ -563,7 +553,7 @@ export async function placeOrderWithExits(
           strategyId,
           symbol,
           side: side === 'buy' ? 'long' : 'short',
-          size: calculatedSize,
+          size: finalSize,
           status: 'open',
           entryPrice: currentPrice,
           openedAt: new Date(),

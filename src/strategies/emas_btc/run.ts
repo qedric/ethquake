@@ -250,8 +250,7 @@ export async function runPipelineTask() {
           stopConfig,
           { type: 'none', price: 0 },
           TRADING_PAIR,
-          true, // isStopOrder
-          POSITION_SIZE_TYPE
+          true // isStopOrder
         )
         if (result.success && result.newOrderId) {
           currentStopOrderId = result.newOrderId
@@ -273,8 +272,7 @@ export async function runPipelineTask() {
           { type: 'none', distance: 0 },
           tpConfig,
           TRADING_PAIR,
-          false, // isStopOrder
-          POSITION_SIZE_TYPE
+          false // isStopOrder
         )
         if (result.success && result.newOrderId) {
           currentTakeProfitOrderId = result.newOrderId

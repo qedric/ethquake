@@ -429,8 +429,7 @@ const tests: TestCase[] = [
         { type: 'fixed', distance: 0, stopPrice: newStopPrice },
         { type: 'none', price: 0 },
         TEST_SYMBOL,
-        true, // isStopOrder
-        'fixed'
+        true // isStopOrder
       )
 
       if (!replaceStopResult.success || !replaceStopResult.newOrderId) {
@@ -453,8 +452,7 @@ const tests: TestCase[] = [
         { type: 'none', distance: 0 },
         { type: 'limit', price: newTpPrice },
         TEST_SYMBOL,
-        false, // isStopOrder
-        'fixed'
+        false // isStopOrder
       )
 
       if (!replaceTpResult.success || !replaceTpResult.newOrderId) {
@@ -700,9 +698,7 @@ const tests: TestCase[] = [
         { type: 'fixed', distance: 0, stopPrice: newStopPrice },
         { type: 'none', price: 0 },
         TEST_SYMBOL,
-        true, // isStopOrder
-        'risk', // Use risk-based sizing
-        0 // SUI uses 0 decimal places
+        true // isStopOrder
       )
 
       if (!replaceStopResult.success || !replaceStopResult.newOrderId) {
@@ -725,9 +721,7 @@ const tests: TestCase[] = [
         { type: 'none', distance: 0 },
         { type: 'limit', price: newTpPrice },
         TEST_SYMBOL,
-        false, // isStopOrder
-        'risk', // Use risk-based sizing
-        0 // SUI uses 0 decimal places
+        false // isStopOrder
       )
 
       if (!replaceTpResult.success || !replaceTpResult.newOrderId) {
