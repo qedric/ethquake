@@ -114,10 +114,6 @@ async function loadStrategies() {
         continue
       }
 
-      // Run the pipeline task once to initialize
-      console.log(`Initializing strategy ${config.name}...`)
-      await mod.runPipelineTask()
-      
       strategies[config.name].runPipelineTask = mod.runPipelineTask
       console.log(`Successfully loaded strategy ${config.name}`)
 
