@@ -162,7 +162,7 @@ router.post('/alert-hook', (req, res) => {
     return
   }
 
-  // Store the alert
+  // Store the alert, then process the trade
   storeAlert(alert).then(async () => {
     // Process the alert based on the action and position changes
     const action = alert.strategy.order.action.toLowerCase()

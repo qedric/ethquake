@@ -23,7 +23,6 @@ export async function executeTradingViewTrade(
   prevPosition: string
 ): Promise<any> {
   try {
-    console.log(`[TradingView Webhook] Processing ${action} order for ${ticker}`)
     console.log(`[TradingView Webhook] Position change: ${prevPosition} -> ${currentPosition}`)
 
     // Validate action
@@ -34,24 +33,27 @@ export async function executeTradingViewTrade(
 
     // Validate positions
     const validPositions = ['long', 'short', 'flat']
-    if (!validPositions.includes(currentPosition) || !validPositions.includes(prevPosition)) {
+    const trimmedCurrentPosition = currentPosition.trim()
+    const trimmedPrevPosition = prevPosition.trim()
+    
+    if (!validPositions.includes(trimmedCurrentPosition) || !validPositions.includes(trimmedPrevPosition)) {
       throw new Error(`Invalid position values: current=${currentPosition}, prev=${prevPosition}. Must be 'long', 'short', or 'flat'`)
     }
 
     // Determine the type of position change
-    const positionChange = determinePositionChange(prevPosition, currentPosition)
-    console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${prevPosition} to ${currentPosition} based on ${direction} signal`)
+    const positionChange = determinePositionChange(trimmedPrevPosition, trimmedCurrentPosition)
+    console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${trimmedPrevPosition} to ${trimmedCurrentPosition} based on ${direction} signal`)
 
     // Skip if this is just a position close (no new position to enter)
     if (positionChange === 'close_only') {
       console.log('[TradingView Webhook] Skipping trade - position close only')
-      //sendAlert(`TradingView position close detected for ${ticker}: ${prevPosition} -> ${currentPosition}`)
+      //sendAlert(`TradingView position close detected for ${ticker}: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}`)
       return {
         success: true,
         direction,
         ticker,
         action: 'position_close',
-        positionChange: `${prevPosition} -> ${currentPosition}`,
+        positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
         message: 'Position close detected - no new trade needed'
       }
     }
@@ -100,7 +102,7 @@ export async function executeTradingViewTrade(
     const orderStatus = orderResult?.marketOrder?.result || 'failed'
     //const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
     
-    //sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${prevPosition} -> ${currentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
+    //sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
 
     console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
     return {
@@ -109,7 +111,7 @@ export async function executeTradingViewTrade(
       ticker,
       tradingPair,
       positionSize: calculatedPositionSize,
-      positionChange: `${prevPosition} -> ${currentPosition}`,
+      positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
       changeType: positionChange,
       orderResult
     }
