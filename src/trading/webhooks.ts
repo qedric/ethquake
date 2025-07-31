@@ -1,5 +1,5 @@
 import { placeOrderWithExits, getCurrentPrice, calculatePositionSize } from './kraken.js'
-import { sendAlert } from '../alerts/index.js'
+//import { sendAlert } from '../alerts/index.js'
 
 // Helper function to round price to 2 decimal places (same as in kraken.ts)
 function roundPrice(price: number): number {
@@ -45,7 +45,7 @@ export async function executeTradingViewTrade(
     // Skip if this is just a position close (no new position to enter)
     if (positionChange === 'close_only') {
       console.log('[TradingView Webhook] Skipping trade - position close only')
-      sendAlert(`TradingView position close detected for ${ticker}: ${prevPosition} -> ${currentPosition}`)
+      //sendAlert(`TradingView position close detected for ${ticker}: ${prevPosition} -> ${currentPosition}`)
       return {
         success: true,
         direction,
@@ -100,7 +100,7 @@ export async function executeTradingViewTrade(
     const orderStatus = orderResult?.marketOrder?.result || 'failed'
     const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
     
-    sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${prevPosition} -> ${currentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
+    //sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${prevPosition} -> ${currentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
 
     console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
     return {
@@ -116,7 +116,7 @@ export async function executeTradingViewTrade(
 
   } catch (error) {
     console.error('[TradingView Webhook] Error executing trade:', error)
-    sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}`)
+    //sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}`)
     throw error
   }
 }
