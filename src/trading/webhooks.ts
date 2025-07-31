@@ -1,4 +1,4 @@
-import { placeOrderWithExits, getCurrentPrice, calculatePositionSize } from './kraken.js'
+import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, cleanupPosition } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
 // Helper function to round price to 2 decimal places (same as in kraken.ts)
@@ -58,6 +58,24 @@ export async function executeTradingViewTrade(
     const positionChange = determinePositionChange(trimmedPrevPosition, trimmedCurrentPosition)
     console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${trimmedPrevPosition} to ${trimmedCurrentPosition} based on ${direction} signal`)
 
+    // Map ticker to Kraken trading pair if needed
+    const tradingPair = mapTickerToTradingPair(ticker)
+    console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
+
+    // Handle reverse position changes - close existing position first
+    if (positionChange === 'reverse_position') {
+      console.log(`[TradingView Webhook] Reverse position detected - closing existing ${trimmedPrevPosition} position first`)
+      
+      // Close the existing position
+      const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
+      if (!closeResult) {
+        throw new Error(`Failed to close existing ${trimmedPrevPosition} position for ${ticker}`)
+      }
+      
+      console.log(`[TradingView Webhook] Successfully closed existing position for ${ticker}`)
+      //sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`)
+    }
+
     // Skip if this is just a position close (no new position to enter)
     if (positionChange === 'close_only') {
       console.log('[TradingView Webhook] Skipping trade - position close only')
@@ -71,10 +89,6 @@ export async function executeTradingViewTrade(
         message: 'Position close detected - no new trade needed'
       }
     }
-
-    // Map ticker to Kraken trading pair if needed
-    const tradingPair = mapTickerToTradingPair(ticker)
-    console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
 
     // Calculate position size based on risk
     const precision = getPositionSizePrecision(tradingPair)
@@ -133,9 +147,15 @@ export async function executeTradingViewTrade(
 
     // Send alert about the trade
     const orderStatus = orderResult?.marketOrder?.result || 'failed'
-    //const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
+    const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
     
-    //sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`)
+    const alertMessage = positionChange === 'reverse_position' 
+      ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+      : `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+
+    console.log('alertMessage', alertMessage)
+    
+    //sendAlert(alertMessage)
 
     console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
     return {
@@ -146,7 +166,8 @@ export async function executeTradingViewTrade(
       positionSize: calculatedPositionSize,
       positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
       changeType: positionChange,
-      orderResult
+      orderResult,
+      positionClosed: positionChange === 'reverse_position' ? trimmedPrevPosition : null
     }
 
   } catch (error) {
