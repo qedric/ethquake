@@ -316,12 +316,51 @@ export async function replaceOrder(
   precision?: number // Decimal places for position size rounding
 ): Promise<{ success: boolean, newOrderId: string | null }> {
   try {
+    // Get current price for stop distance calculation
+    const currentPrice = await getCurrentPrice(symbol)
+    
     // Calculate the actual position size based on type
+    let stopDistance: number | undefined
+    let finalPositionSizeType = positionSizeType
+    let finalSize = size
+    
+    // For risk-based sizing, we need a stop distance
+    if (positionSizeType === 'risk') {
+      if (stopConfig.type !== 'none') {
+        if (stopConfig.type === 'trailing') {
+          // For trailing stops, use the trailing distance as the stop distance
+          stopDistance = stopConfig.distance
+        } else if (stopConfig.type === 'fixed') {
+          // For fixed stops, calculate the distance from current price to stop price
+          const priceDistance = Math.abs(currentPrice - stopConfig.stopPrice)
+          stopDistance = (priceDistance / currentPrice) * 100
+        }
+      } else {
+        // If no stop config but we're using risk-based sizing, fall back to fixed sizing
+        // This happens when replacing take profit orders (which don't have stops)
+        // We need to get the actual position size from the existing position
+        finalPositionSizeType = 'fixed'
+        try {
+          const response = await getOpenPositions()
+          const positions = response.data.openPositions || []
+          const position = positions.find((pos: any) => pos.symbol === symbol)
+          if (position) {
+            finalSize = position.size
+            console.log(`No stop distance available for risk-based sizing, using existing position size: ${finalSize}`)
+          } else {
+            console.log('No stop distance available for risk-based sizing, falling back to fixed sizing with original size')
+          }
+        } catch (error) {
+          console.log('Error getting position size, falling back to fixed sizing with original size:', error)
+        }
+      }
+    }
+    
     const calculatedSize = await calculatePositionSize(
-      size, 
-      positionSizeType, 
+      finalSize, 
+      finalPositionSizeType, 
       symbol,
-      positionSizeType === 'risk' ? stopConfig.distance : undefined,
+      stopDistance,
       precision
     )
     

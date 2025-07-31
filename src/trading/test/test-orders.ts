@@ -642,6 +642,110 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: 'Replace orders with risk-based position sizing',
+    fn: async () => {
+      console.log('\nTesting order replacement with risk-based position sizing...')
+      
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      const riskPercentage = 0.2 // 0.2% risk
+      
+      // Initial order parameters
+      const initialStopPrice = currentPrice * 0.99  // 1% below
+      const initialTpPrice = currentPrice * 1.01    // 1% above
+      
+      // New order parameters
+      const newStopPrice = currentPrice * 0.98     // 2% below
+      const newTpPrice = currentPrice * 1.02       // 2% above
+
+      console.log('Current price:', currentPrice)
+      console.log('Risk percentage:', riskPercentage)
+      console.log('Initial stop/tp:', initialStopPrice, initialTpPrice)
+      console.log('New stop/tp:', newStopPrice, newTpPrice)
+
+      // Place initial position with both stop and take profit using risk-based sizing
+      const initialResult = await placeOrderWithExits(
+        'buy',
+        riskPercentage, // This will be interpreted as risk percentage
+        { type: 'fixed', distance: 0, stopPrice: initialStopPrice },
+        { type: 'limit', price: initialTpPrice },
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'risk', // Use risk-based sizing
+        0 // SUI uses 0 decimal places
+      )
+
+      if (!initialResult.stopOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place initial stop order')
+      }
+      if (!initialResult.takeProfitOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place initial take profit order')
+      }
+
+      // Wait for initial orders to be placed
+      console.log('\nWaiting for initial orders to be placed...')
+      if (!await waitForOrderExecution(initialResult.stopOrder.sendStatus.order_id, true)) {
+        throw new Error('Failed to verify initial stop order')
+      }
+      if (!await waitForOrderExecution(initialResult.takeProfitOrder.sendStatus.order_id, true)) {
+        throw new Error('Failed to verify initial take profit order')
+      }
+
+      // Replace the stop order with risk-based sizing
+      console.log('\nReplacing stop order with risk-based sizing...')
+      const replaceStopResult = await replaceOrder(
+        initialResult.stopOrder.sendStatus.order_id,
+        'buy',
+        riskPercentage, // Risk percentage
+        { type: 'fixed', distance: 0, stopPrice: newStopPrice },
+        { type: 'none', price: 0 },
+        TEST_SYMBOL,
+        true, // isStopOrder
+        'risk', // Use risk-based sizing
+        0 // SUI uses 0 decimal places
+      )
+
+      if (!replaceStopResult.success || !replaceStopResult.newOrderId) {
+        throw new Error('Failed to replace stop order with risk-based sizing')
+      }
+
+      // Verify new stop
+      console.log('Verifying new stop order...')
+      if (!await waitForOrderExecution(replaceStopResult.newOrderId, true)) {
+        throw new Error('Failed to verify new stop order')
+      }
+      console.log('New stop order verified')
+
+      // Replace the take profit order with risk-based sizing
+      console.log('\nReplacing take profit order with risk-based sizing...')
+      const replaceTpResult = await replaceOrder(
+        initialResult.takeProfitOrder.sendStatus.order_id,
+        'buy',
+        riskPercentage, // Risk percentage
+        { type: 'none', distance: 0 },
+        { type: 'limit', price: newTpPrice },
+        TEST_SYMBOL,
+        false, // isStopOrder
+        'risk', // Use risk-based sizing
+        0 // SUI uses 0 decimal places
+      )
+
+      if (!replaceTpResult.success || !replaceTpResult.newOrderId) {
+        throw new Error('Failed to replace take profit order with risk-based sizing')
+      }
+
+      // Verify new take profit
+      console.log('Verifying new take profit order...')
+      if (!await waitForOrderExecution(replaceTpResult.newOrderId, true)) {
+        throw new Error('Failed to verify new take profit order')
+      }
+      console.log('New take profit order verified')
+
+      // Clean up
+      await cleanupPosition(TEST_SYMBOL)
+    }
+  },
+  {
     name: 'Order cancellation',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
