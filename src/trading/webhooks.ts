@@ -6,7 +6,7 @@ function roundPrice(price: number): number {
   return Math.round(price * 100) / 100
 }
 
-const POSITION_SIZE = 0.5 // % of account risked
+const POSITION_SIZE = 1.5 // % of account risked
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
 
