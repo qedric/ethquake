@@ -22,13 +22,13 @@ interface TradingViewAlert {
 async function storeAlert(alert: TradingViewAlert) {
   const db = await getDb('tradingview_alerts')
   const collection = db.collection('alerts')
-  
+
   const alertDoc = {
     ...alert,
     received_at: new Date(),
     processed: false
   }
-  
+
   await collection.insertOne(alertDoc)
   console.log('Stored TradingView alert:', alertDoc)
 }
@@ -36,38 +36,29 @@ async function storeAlert(alert: TradingViewAlert) {
 // TradingView webhook validation
 function validateTradingViewRequest(req: express.Request): boolean {
   const webhookSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET
-  
+
+  console.log('req', req)
+
   // Method 1: Check IP whitelist (TradingView's official IPs)
-  const clientIP = req.ip || req.connection.remoteAddress
+  const clientIP = req.ip || req.connection.remoteAddress || ''
   const allowedIPs = [
     '52.89.214.238',
-    '34.212.75.30', 
+    '34.212.75.30',
     '54.218.53.128',
     '52.32.178.7'
   ]
-  
-  if (clientIP && allowedIPs.includes(clientIP)) {
+
+  if (allowedIPs.includes(clientIP)) {
     console.log('Validated TradingView IP address:', clientIP)
     return true
   }
-  
-  // Method 2: Check User-Agent (if no secret configured)
-  if (!webhookSecret) {
-    const userAgent = req.headers['user-agent'] as string
-    if (userAgent && userAgent.includes('TradingView')) {
-      console.log('Validated TradingView User-Agent:', userAgent)
-      return true
-    }
-    console.warn('No TradingView validation configured, allowing request')
-    return true
-  }
-  
+
   // Method 3: Check for secret token in message
   if (req.body.message && req.body.message.includes(webhookSecret)) {
     console.log('Validated secret token in message')
     return true
   }
-  
+
   console.warn('TradingView validation failed - IP not whitelisted and secret token not found in message')
   return false
 }
@@ -79,16 +70,16 @@ function validateTimestamp(req: express.Request): boolean {
     console.warn('No timestamp provided in webhook request')
     return false
   }
-  
+
   const requestTime = new Date(timestamp).getTime()
   const currentTime = Date.now()
   const maxAge = 5 * 60 * 1000 // 5 minutes in milliseconds
-  
+
   if (Math.abs(currentTime - requestTime) > maxAge) {
     console.warn(`Webhook timestamp too old: ${timestamp}, current: ${new Date().toISOString()}`)
     return false
   }
-  
+
   console.log('Timestamp validation passed')
   return true
 }
@@ -98,39 +89,39 @@ router.post('/alert-hook', (req, res) => {
   // Sanitize request body for logging and storage (remove secret token)
   const webhookSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET
   let sanitizedBody = { ...req.body }
-  
+
   if (webhookSecret && sanitizedBody.message) {
     sanitizedBody.message = sanitizedBody.message.replace(webhookSecret, '[SECRET_REDACTED]')
   }
-  
+
   console.log('Received TradingView webhook:', sanitizedBody)
-  
-      // Validate TradingView request
-    if (!validateTradingViewRequest(req)) {
-      res.status(401).json({ error: 'Invalid TradingView request' })
-      return
-    }
-    
-    // Validate timestamp to prevent replay attacks
-    if (!validateTimestamp(req)) {
-      res.status(401).json({ error: 'Invalid timestamp or replay attack detected' })
-      return
-    }
-  
+
+  // Validate TradingView request
+  if (!validateTradingViewRequest(req)) {
+    res.status(401).json({ error: 'Invalid TradingView request' })
+    return
+  }
+
+  // Validate timestamp to prevent replay attacks
+  if (!validateTimestamp(req)) {
+    res.status(401).json({ error: 'Invalid timestamp or replay attack detected' })
+    return
+  }
+
   const alert: TradingViewAlert = {
     strategy: req.body.strategy,
     ticker: req.body.ticker,
     message: sanitizedBody.message, // Use the already sanitized message
     timestamp: req.body.timestamp || new Date().toISOString()
   }
-  
+
   // Validate required fields
   if (!alert.strategy?.order?.action || !alert.ticker || !alert.strategy?.current_position || !alert.strategy?.prev_position) {
     console.warn('Invalid TradingView alert received:', req.body)
     res.status(400).json({ error: 'Missing required fields: action, ticker, current_position, or prev_position' })
     return
   }
-  
+
   // Store the alert
   storeAlert(alert).then(async () => {
     // Process the alert based on the action and position changes
@@ -138,15 +129,15 @@ router.post('/alert-hook', (req, res) => {
     const ticker = alert.ticker
     const currentPosition = alert.strategy.current_position.toLowerCase()
     const prevPosition = alert.strategy.prev_position.toLowerCase()
-    
+
     console.log(`Processing ${action} order for ${ticker} - Position: ${prevPosition} -> ${currentPosition}`)
-    
+
     try {
       // Execute the trade using our webhook handler
       const tradeResult = await executeTradingViewTrade(action, ticker, currentPosition, prevPosition)
-      
-      res.status(200).json({ 
-        success: true, 
+
+      res.status(200).json({
+        success: true,
         message: 'Alert received and trade executed',
         action,
         ticker,
@@ -155,14 +146,14 @@ router.post('/alert-hook', (req, res) => {
       })
     } catch (tradeError) {
       console.error('Error executing trade:', tradeError)
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Trade execution failed',
         details: tradeError instanceof Error ? tradeError.message : String(tradeError)
       })
     }
   }).catch((error) => {
     console.error('Error processing TradingView webhook:', error)
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : String(error)
     })
@@ -173,7 +164,7 @@ router.post('/alert-hook', (req, res) => {
 router.get('/alerts', (req, res) => {
   getDb('tradingview_alerts').then((db) => {
     const collection = db.collection('alerts')
-    
+
     const limit = parseInt(req.query.limit as string) || 50
     return collection
       .find({})
