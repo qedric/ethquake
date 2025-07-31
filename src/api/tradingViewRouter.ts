@@ -37,7 +37,9 @@ async function storeAlert(alert: TradingViewAlert) {
 function validateTradingViewRequest(req: express.Request): boolean {
   const webhookSecret = process.env.TRADINGVIEW_WEBHOOK_SECRET
 
-  console.log('req', req)
+  console.log('Request headers:', req.headers)
+  console.log('Client IP:', req.ip)
+  console.log('X-Forwarded-For:', req.headers['x-forwarded-for'])
 
   // Method 1: Check IP whitelist (TradingView's official IPs)
   const clientIP = req.ip || req.connection.remoteAddress || ''
@@ -51,6 +53,18 @@ function validateTradingViewRequest(req: express.Request): boolean {
   if (allowedIPs.includes(clientIP)) {
     console.log('Validated TradingView IP address:', clientIP)
     return true
+  }
+
+  // Method 2: Check X-Forwarded-For header as fallback
+  const forwardedFor = req.headers['x-forwarded-for'] as string
+  if (forwardedFor) {
+    const forwardedIPs = forwardedFor.split(',').map(ip => ip.trim())
+    const firstForwardedIP = forwardedIPs[0]
+    
+    if (allowedIPs.includes(firstForwardedIP)) {
+      console.log('Validated TradingView IP from X-Forwarded-For:', firstForwardedIP)
+      return true
+    }
   }
 
   // Method 3: Check for secret token in message

@@ -26,6 +26,9 @@ const authMiddleware = basicAuth({
 const app = express()
 const PORT = process.env.PORT || 8080
 
+// Trust proxy headers (needed for Railway and other cloud platforms)
+app.set('trust proxy', true)
+
 // Add JSON body parser middleware
 app.use(express.json())
 
