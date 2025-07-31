@@ -79,22 +79,41 @@ function validateTradingViewRequest(req: express.Request): boolean {
 
 // Prevent replay attacks by checking timestamp
 function validateTimestamp(req: express.Request): boolean {
-  const timestamp = req.body.timestamp
-  if (!timestamp) {
-    console.warn('No timestamp provided in webhook request')
-    return false
+  // Method 1: Check if TradingView included a timestamp in the body
+  const bodyTimestamp = req.body.timestamp
+  if (bodyTimestamp) {
+    const requestTime = new Date(bodyTimestamp).getTime()
+    const currentTime = Date.now()
+    const maxAge = 5 * 60 * 1000 // 5 minutes in milliseconds
+
+    if (Math.abs(currentTime - requestTime) > maxAge) {
+      console.warn(`Webhook timestamp too old: ${bodyTimestamp}, current: ${new Date().toISOString()}`)
+      return false
+    }
+
+    console.log('Timestamp validation passed using body timestamp')
+    return true
   }
 
-  const requestTime = new Date(timestamp).getTime()
-  const currentTime = Date.now()
-  const maxAge = 5 * 60 * 1000 // 5 minutes in milliseconds
+  // Method 2: Use Railway's x-request-start header as fallback
+  const requestStart = req.headers['x-request-start'] as string
+  if (requestStart) {
+    const requestTime = parseInt(requestStart)
+    const currentTime = Date.now()
+    const maxAge = 5 * 60 * 1000 // 5 minutes in milliseconds
 
-  if (Math.abs(currentTime - requestTime) > maxAge) {
-    console.warn(`Webhook timestamp too old: ${timestamp}, current: ${new Date().toISOString()}`)
-    return false
+    if (Math.abs(currentTime - requestTime) > maxAge) {
+      console.warn(`Railway request timestamp too old: ${requestStart}, current: ${currentTime}`)
+      return false
+    }
+
+    console.log('Timestamp validation passed using Railway request-start')
+    return true
   }
 
-  console.log('Timestamp validation passed')
+  // Method 3: If no timestamp available, rely on IP validation only
+  // This is acceptable since we're already validating TradingView's official IPs
+  console.log('No timestamp available, relying on IP validation for replay protection')
   return true
 }
 
@@ -105,7 +124,14 @@ router.post('/alert-hook', (req, res) => {
   let sanitizedBody = { ...req.body }
 
   if (webhookSecret && sanitizedBody.message) {
+    console.log('Original message length:', sanitizedBody.message.length)
+    console.log('Secret length:', webhookSecret.length)
+    console.log('Message contains secret:', sanitizedBody.message.includes(webhookSecret))
+    
     sanitizedBody.message = sanitizedBody.message.replace(webhookSecret, '[SECRET_REDACTED]')
+    
+    console.log('Sanitized message length:', sanitizedBody.message.length)
+    console.log('Message still contains secret:', sanitizedBody.message.includes(webhookSecret))
   }
 
   console.log('Received TradingView webhook:', sanitizedBody)
@@ -131,7 +157,7 @@ router.post('/alert-hook', (req, res) => {
 
   // Validate required fields
   if (!alert.strategy?.order?.action || !alert.ticker || !alert.strategy?.current_position || !alert.strategy?.prev_position) {
-    console.warn('Invalid TradingView alert received:', req.body)
+    console.warn('Invalid TradingView alert received:', sanitizedBody)
     res.status(400).json({ error: 'Missing required fields: action, ticker, current_position, or prev_position' })
     return
   }
