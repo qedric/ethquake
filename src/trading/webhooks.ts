@@ -76,17 +76,35 @@ export async function executeTradingViewTrade(
       //sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`)
     }
 
-    // Skip if this is just a position close (no new position to enter)
+    // Handle position close - actually close the existing position
     if (positionChange === 'close_only') {
-      console.log('[TradingView Webhook] Skipping trade - position close only')
-      //sendAlert(`TradingView position close detected for ${ticker}: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}`)
+      console.log(`[TradingView Webhook] Position close detected - closing existing ${trimmedPrevPosition} position`)
+      
+      // Close the existing position
+      const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
+      if (!closeResult) {
+        console.log(`[TradingView Webhook] No current position found for ${ticker} - nothing to close`)
+        return {
+          success: true,
+          direction,
+          ticker,
+          action: 'position_close',
+          positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
+          message: 'No current position found - nothing to close'
+        }
+      }
+      
+      console.log(`[TradingView Webhook] Successfully closed ${trimmedPrevPosition} position for ${ticker}`)
+      //sendAlert(`TradingView position close for ${ticker}: Closed ${trimmedPrevPosition} position`)
+      
       return {
         success: true,
         direction,
         ticker,
         action: 'position_close',
         positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
-        message: 'Position close detected - no new trade needed'
+        message: 'Position successfully closed',
+        positionClosed: trimmedPrevPosition
       }
     }
 
