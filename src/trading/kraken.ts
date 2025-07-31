@@ -446,17 +446,29 @@ export async function placeOrderWithExits(
   let positionId: string | undefined // Track MongoDB position ID
 
   try {
+    // Get current price for entry
+    const currentPrice = await getCurrentPrice(symbol)
+    
     // Calculate the actual position size based on type
+    let stopDistance: number | undefined
+    if (positionSizeType === 'risk' && stopConfig.type !== 'none') {
+      if (stopConfig.type === 'trailing') {
+        // For trailing stops, use the trailing distance as the stop distance
+        stopDistance = stopConfig.distance
+      } else if (stopConfig.type === 'fixed') {
+        // For fixed stops, calculate the distance from current price to stop price
+        const priceDistance = Math.abs(currentPrice - stopConfig.stopPrice)
+        stopDistance = (priceDistance / currentPrice) * 100
+      }
+    }
+    
     const calculatedSize = await calculatePositionSize(
       size, 
       positionSizeType, 
       symbol,
-      positionSizeType === 'risk' ? stopConfig.distance : undefined,
+      stopDistance,
       precision
     )
-    
-    // Get current price for entry
-    const currentPrice = await getCurrentPrice(symbol)
 
     // Create the market order data
     const marketOrderData = {

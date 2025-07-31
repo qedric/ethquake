@@ -572,6 +572,76 @@ const tests: TestCase[] = [
     }
   },
   {
+    name: 'Risk-based position sizing with trailing stop',
+    fn: async () => {
+      console.log('\nTesting risk-based position sizing with trailing stop...')
+      
+      // Test parameters
+      const riskPercentage = 0.3 // 0.3% risk (reduced for smaller position size)
+      const trailDistance = 1.5 // 1.5% trailing distance
+      
+      console.log(`Risk: ${riskPercentage}% of account`)
+      console.log(`Trailing distance: ${trailDistance}%`)
+      
+      // Get current price for debugging
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      console.log(`Current price: $${currentPrice.toFixed(2)}`)
+      
+      // Calculate position size using risk-based sizing with trailing stop
+      const calculatedSize = await calculatePositionSize(riskPercentage, 'risk', TEST_SYMBOL, trailDistance, 0)
+      console.log(`Calculated position size: ${calculatedSize} units`)
+      
+      // Show what the order would look like
+      const orderValue = calculatedSize * currentPrice
+      const maxLoss = calculatedSize * (currentPrice * trailDistance / 100)
+      console.log(`Order value: $${orderValue.toFixed(2)}`)
+      console.log(`Max loss if trailing stop hit: $${maxLoss.toFixed(2)} (${riskPercentage}% of account)`)
+      
+      // Place a test order with risk-based sizing and trailing stop
+      const result = await placeOrderWithExits(
+        'buy',
+        riskPercentage, // This will be interpreted as risk percentage
+        { type: 'trailing', distance: trailDistance },
+        { type: 'none', price: 0 },
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'risk', // Use risk-based sizing
+        0 // SUI uses 0 decimal places
+      )
+      
+      if (!result.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place risk-based order with trailing stop')
+      }
+      
+      console.log('Risk-based order with trailing stop placed successfully')
+      console.log('Market order ID:', result.marketOrder.sendStatus.order_id)
+      
+      if (result.stopOrder?.sendStatus?.order_id) {
+        console.log('Trailing stop order ID:', result.stopOrder.sendStatus.order_id)
+      }
+      
+      // Wait for order execution
+      console.log('\nWaiting for order execution...')
+      if (!await waitForOrderExecution(result.marketOrder.sendStatus.order_id, false)) {
+        throw new Error('Order execution timeout')
+      }
+      console.log('Order executed successfully')
+      
+      // Verify position
+      console.log('\nVerifying position...')
+      if (!await waitForPosition(TEST_SYMBOL, true)) {
+        throw new Error('Position not detected after multiple attempts')
+      }
+      console.log('Position verified')
+      
+      // Clean up
+      console.log('\nCleaning up position...')
+      await cleanupPosition(TEST_SYMBOL)
+      console.log('Position cleaned up')
+    }
+  },
+  {
     name: 'Order cancellation',
     fn: async () => {
       const currentPrice = await getCurrentPrice(TEST_SYMBOL)
