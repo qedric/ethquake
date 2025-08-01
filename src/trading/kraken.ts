@@ -93,9 +93,41 @@ interface LimitTakeProfitConfig extends BaseTakeProfitConfig {
 
 type TakeProfitConfig = NoTakeProfitConfig | LimitTakeProfitConfig
 
-// Add this helper function before the placeOrder function
-function roundPrice(price: number): number {
-  return Math.round(price * 100) / 100 // Round to 2 decimal places
+/**
+ * Returns the correct position size precision for each trading pair
+ * Different instruments have different minimum position size requirements
+ */
+export function getPositionSizePrecision(tradingPair: string): number {
+  const precisionMap: { [key: string]: number } = {
+    'PF_SUIUSD': 0,  // SUI requires whole numbers
+    'PF_SOLUSD': 2,  // SOL uses 2 decimal places
+    'PF_ETHUSD': 3,  // ETH uses 3 decimal places
+    'PF_BTCUSD': 4,  // BTC uses 4 decimal places
+  }
+  
+  return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
+}
+
+/**
+ * Returns the correct price precision for each trading pair
+ * Different instruments have different price precision requirements
+ */
+export function getPricePrecision(tradingPair: string): number {
+  const precisionMap: { [key: string]: number } = {
+    'PF_SUIUSD': 4,  // SUI uses 4 decimal place
+    'PF_SOLUSD': 2,  // SOL uses 2 decimal places
+    'PF_ETHUSD': 1,  // ETH uses 1 decimal place
+    'PF_BTCUSD': 0,  // BTC uses 0 decimal place
+  }
+  
+  return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
+}
+
+/**
+ * Rounds a price to the specified precision
+ */
+export function roundPrice(price: number, precision: number = 2): number {
+  return Math.round(price * Math.pow(10, precision)) / Math.pow(10, precision)
 }
 
 /**
@@ -348,7 +380,7 @@ export async function replaceOrder(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: actualPositionSize,
-      stopPrice: roundPrice((stopConfig as FixedStopConfig).stopPrice),
+      stopPrice: roundPrice((stopConfig as FixedStopConfig).stopPrice, getPricePrecision(symbol)),
       reduceOnly: true,
       triggerSignal: 'mark'
     } : !isStopOrder && takeProfitConfig.type === 'limit' ? {
@@ -356,7 +388,7 @@ export async function replaceOrder(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: actualPositionSize,
-      stopPrice: roundPrice(takeProfitConfig.price),
+      stopPrice: roundPrice(takeProfitConfig.price, getPricePrecision(symbol)),
       reduceOnly: true,
       triggerSignal: 'mark'
     } : null
@@ -523,7 +555,7 @@ export async function placeOrderWithExits(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: finalSize,
-      stopPrice: roundPrice(stopConfig.stopPrice),
+      stopPrice: roundPrice(stopConfig.stopPrice, getPricePrecision(symbol)),
       reduceOnly: true,  // Always true for stop orders to prevent position stacking
       triggerSignal: 'mark'
     } : null
@@ -534,7 +566,7 @@ export async function placeOrderWithExits(
       symbol: symbol,
       side: side.toLowerCase() === 'buy' ? 'sell' : 'buy',
       size: finalSize,
-      stopPrice: roundPrice(takeProfitConfig.price),
+      stopPrice: roundPrice(takeProfitConfig.price, getPricePrecision(symbol)),
       reduceOnly: true,  // Always true for take profit orders to prevent position stacking
       triggerSignal: 'mark'
     } : null
@@ -766,14 +798,14 @@ export async function placeStandaloneOrder(
     triggerSignal: 'mark'
   }
   if (orderType === 'stp' && config.stopPrice !== undefined) {
-    orderData.stopPrice = roundPrice(config.stopPrice)
+    orderData.stopPrice = roundPrice(config.stopPrice, getPricePrecision(symbol))
   }
   if (orderType === 'trailing_stop' && config.distance !== undefined) {
     orderData.trailingStopDeviationUnit = config.deviationUnit || 'PERCENT'
     orderData.trailingStopMaxDeviation = config.distance
   }
   if (orderType === 'take_profit' && config.stopPrice !== undefined) {
-    orderData.stopPrice = roundPrice(config.stopPrice)
+    orderData.stopPrice = roundPrice(config.stopPrice, getPricePrecision(symbol))
   }
   console.log('[StandaloneOrder] Placing order:', orderData)
   const result = await sendOrder(orderData)

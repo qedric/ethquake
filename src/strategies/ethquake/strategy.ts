@@ -1,12 +1,7 @@
 import { getDb } from '../../lib/mongodb.js'
-import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, placeStandaloneOrder } from '../../trading/kraken.js'
+import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, placeStandaloneOrder, roundPrice, getPricePrecision } from '../../trading/kraken.js'
 import { getEMAs } from '../../trading/indicators.js'
 import { sendAlert } from '../../alerts/index.js'
-
-// Helper function to round price to 2 decimal places (same as in kraken.ts)
-function roundPrice(price: number): number {
-  return Math.round(price * 100) / 100
-}
 
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
@@ -161,7 +156,7 @@ export async function executeTradeStrategy() {
       const fixedStopPrice = roundPrice(direction === 'buy'
         ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
         : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
-      )
+      , getPricePrecision(TRADING_PAIR))
 
       const fixedStopConfig = {
         type: 'fixed' as const,

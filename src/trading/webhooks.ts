@@ -1,29 +1,11 @@
-import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, cleanupPosition } from './kraken.js'
+import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
-
-// Helper function to round price to 2 decimal places (same as in kraken.ts)
-function roundPrice(price: number): number {
-  return Math.round(price * 100) / 100
-}
 
 const POSITION_SIZE = 1.0 // % of account risked
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
 
-/**
- * Returns the correct position size precision for each trading pair
- * Different instruments have different minimum position size requirements
- */
-function getPositionSizePrecision(tradingPair: string): number {
-  const precisionMap: { [key: string]: number } = {
-    'PF_SUIUSD': 0,  // SUI requires whole numbers
-    'PF_SOLUSD': 2,  // SOL uses 2 decimal places
-    'PF_ETHUSD': 3,  // ETH uses 3 decimal places
-    'PF_BTCUSD': 4,  // BTC uses 4 decimal places
-  }
-  
-  return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
-}
+
 
 /**
  * Executes a trade based on TradingView webhook signal
@@ -142,7 +124,7 @@ export async function executeTradingViewTrade(
     const fixedStopPrice = roundPrice(direction === 'buy'
       ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
       : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
-    )
+    , getPricePrecision(tradingPair))
 
     const fixedStopConfig = {
       type: 'fixed' as const,
