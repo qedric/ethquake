@@ -180,7 +180,7 @@ export async function executeTradeStrategy() {
       }
 
       // If trailing stop was successful, place market order with fixed stop for risk sizing
-      console.log(`[Strategy: ethquake] Trailing stop successful, placing market order with fixed stop`)
+      console.log('[Strategy: ethquake] Trailing stop successful, placing market order with fixed stop')
 
       // Calculate the fixed stop price for risk sizing
       const currentPrice = await getCurrentPrice(TRADING_PAIR)
