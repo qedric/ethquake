@@ -1,4 +1,4 @@
-import { placeOrderWithExits, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision } from './kraken.js'
+import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
 const POSITION_SIZE = 1.0 // % of account risked
@@ -137,28 +137,58 @@ export async function executeTradingViewTrade(
       : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
     , getPricePrecision(tradingPair))
 
-    const fixedStopConfig = {
-      type: 'fixed' as const,
-      distance: FIXED_STOP_DISTANCE,
-      stopPrice: fixedStopPrice
+    console.log(`[TradingView Webhook] Current price: ${currentPrice}, Fixed stop price: ${fixedStopPrice}`)
+
+    // First, place the fixed stop for risk protection
+    console.log(`[TradingView Webhook] Placing fixed stop for risk protection at ${FIXED_STOP_DISTANCE}%`)
+    let fixedStopResult = null
+    let marketOrderResult = null
+    
+    try {
+      fixedStopResult = await placeStandaloneOrder(
+        'stp',
+        direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
+        calculatedPositionSize,
+        tradingPair,
+        { stopPrice: fixedStopPrice },
+        true // reduceOnly
+      )
+
+      if (fixedStopResult?.result === 'success') {
+        console.log(`[TradingView Webhook] Fixed stop placed successfully at ${fixedStopPrice}`)
+      } else {
+        console.error('[TradingView Webhook] Failed to place fixed stop:', fixedStopResult?.error)
+        // Don't proceed with market order if fixed stop fails
+        throw new Error('Failed to place fixed stop')
+      }
+    } catch (fixedStopError) {
+      console.error('[TradingView Webhook] Error placing fixed stop:', fixedStopError)
+      throw new Error('Failed to place fixed stop')
     }
 
-    // Place order with fixed stop (no take profit - rely on TradingView exit webhook)
-    const orderResult = await placeOrderWithExits(
-      direction, 
-      calculatedPositionSize, 
-      fixedStopConfig, 
-      { type: 'none', price: 0 }, // No take profit
-      tradingPair, 
-      false, 
-      'tradingview_webhook', 
-      'fixed', 
-      precision
-    )
+    // If fixed stop was successful, place market order
+    console.log('[TradingView Webhook] Fixed stop successful, placing market order')
+    
+    try {
+      marketOrderResult = await placeOrderWithExits(
+        direction, 
+        calculatedPositionSize, 
+        { type: 'none', distance: 0 }, // No stop (already placed above)
+        { type: 'none', price: 0 }, // No take profit
+        tradingPair, 
+        false, 
+        'tradingview_webhook', 
+        'fixed', 
+        precision
+      )
+    } catch (marketOrderError) {
+      console.error('[TradingView Webhook] Error placing market order:', marketOrderError)
+      throw new Error('Failed to place market order')
+    }
 
     // Send alert about the trade
-    const orderStatus = orderResult?.marketOrder?.result || 'failed'
-    const stopStatus = orderResult?.stopOrder?.sendStatus?.status || 'failed'
+    const orderStatus = marketOrderResult?.marketOrder?.result || 'failed'
+    const stopStatus = fixedStopResult?.sendStatus?.status || 'failed'
     
     const alertMessage = positionChange === 'reverse_position' 
       ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
@@ -177,7 +207,8 @@ export async function executeTradingViewTrade(
       positionSize: calculatedPositionSize,
       positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
       changeType: positionChange,
-      orderResult,
+      marketOrderResult,
+      fixedStopResult,
       positionClosed: positionChange === 'reverse_position' ? trimmedPrevPosition : null
     }
 

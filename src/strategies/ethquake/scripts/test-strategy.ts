@@ -47,7 +47,7 @@ async function testOrderExecution(direction: 'buy' | 'sell') {
             }
 
             // If trailing stop was successful, place market order with fixed stop for risk sizing
-            console.log(`[Test] Trailing stop successful, placing market order with fixed stop`)
+            console.log('[Test] Trailing stop successful, placing market order with fixed stop')
 
             // Calculate the fixed stop price for risk sizing
             const currentPrice = await getCurrentPrice(TRADING_PAIR)
