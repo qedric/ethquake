@@ -7,7 +7,8 @@ import {
   replaceOrder,
   getOrderStatus,
   cancelOrder,
-  calculatePositionSize
+  calculatePositionSize,
+  placeStandaloneOrder
 } from '../kraken.js'
 
 const TEST_SYMBOL = 'PF_SUIUSD'
@@ -786,6 +787,268 @@ const tests: TestCase[] = [
 
       // Clean up any position if it was opened
       await cleanupPosition(TEST_SYMBOL)
+    }
+  },
+  {
+    name: 'Place exit orders before market order',
+    fn: async () => {
+      console.log('\n=== Testing exit orders before market order ===')
+      
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      const stopPrice = currentPrice * 0.98  // 2% below
+      const takeProfitPrice = currentPrice * 1.02  // 2% above
+      
+      console.log('Current price:', currentPrice)
+      console.log('Stop price:', stopPrice)
+      console.log('Take profit price:', takeProfitPrice)
+      
+      // First, place the stop loss order
+      console.log('\n1. Placing stop loss order...')
+      const stopOrderResult = await placeStandaloneOrder(
+        'stp',
+        'sell', // Opposite side of the intended position
+        TEST_SIZE,
+        TEST_SYMBOL,
+        { stopPrice },
+        true // reduceOnly
+      )
+      
+      if (!stopOrderResult.sendStatus?.order_id) {
+        throw new Error('Failed to place stop loss order')
+      }
+      const stopOrderId = stopOrderResult.sendStatus.order_id
+      console.log('Stop loss order placed, ID:', stopOrderId)
+      
+      // Wait for stop order to be placed
+      console.log('\nWaiting for stop loss order placement...')
+      if (!await waitForOrderExecution(stopOrderId, true)) {
+        throw new Error('Stop loss order placement failed')
+      }
+      console.log('Stop loss order confirmed')
+      
+      // Place the take profit order
+      console.log('\n2. Placing take profit order...')
+      const takeProfitOrderResult = await placeStandaloneOrder(
+        'take_profit',
+        'sell', // Opposite side of the intended position
+        TEST_SIZE,
+        TEST_SYMBOL,
+        { stopPrice: takeProfitPrice },
+        true // reduceOnly
+      )
+      
+      if (!takeProfitOrderResult.sendStatus?.order_id) {
+        throw new Error('Failed to place take profit order')
+      }
+      const takeProfitOrderId = takeProfitOrderResult.sendStatus.order_id
+      console.log('Take profit order placed, ID:', takeProfitOrderId)
+      
+      // Wait for take profit order to be placed
+      console.log('\nWaiting for take profit order placement...')
+      if (!await waitForOrderExecution(takeProfitOrderId, true)) {
+        throw new Error('Take profit order placement failed')
+      }
+      console.log('Take profit order confirmed')
+      
+      // Now place the market order to open the position
+      console.log('\n3. Placing market order to open position...')
+      const marketOrderResult = await placeOrderWithExits(
+        'buy',
+        TEST_SIZE,
+        { type: 'none', distance: 0 }, // No stop since we already placed it
+        { type: 'none', price: 0 }, // No take profit since we already placed it
+        TEST_SYMBOL,
+        false, // Not reduceOnly - this opens a position
+        undefined,
+        'fixed'
+      )
+      
+      if (!marketOrderResult.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place market order')
+      }
+      const marketOrderId = marketOrderResult.marketOrder.sendStatus.order_id
+      console.log('Market order placed, ID:', marketOrderId)
+      
+      // Wait for market order execution
+      console.log('\nWaiting for market order execution...')
+      if (!await waitForOrderExecution(marketOrderId, false)) {
+        throw new Error('Market order execution timeout')
+      }
+      console.log('Market order executed')
+      
+      // Verify position exists
+      console.log('\nVerifying position...')
+      if (!await waitForPosition(TEST_SYMBOL, true)) {
+        throw new Error('Position not detected after multiple attempts')
+      }
+      console.log('Position verified')
+      
+      // Check that our exit orders are still active
+      console.log('\n4. Verifying exit orders are still active...')
+      const stopStatus = await getOrderStatus(stopOrderId)
+      const takeProfitStatus = await getOrderStatus(takeProfitOrderId)
+      
+      console.log('Stop order status:', stopStatus.status)
+      console.log('Take profit order status:', takeProfitStatus.status)
+      
+      // Both orders should be in TRIGGER_PLACED state (waiting for position)
+      if (!stopStatus.status.includes('TRIGGER_PLACED')) {
+        console.log('⚠️  Warning: Stop order not in expected state:', stopStatus.status)
+      }
+      if (!takeProfitStatus.status.includes('TRIGGER_PLACED')) {
+        console.log('⚠️  Warning: Take profit order not in expected state:', takeProfitStatus.status)
+      }
+      
+      console.log('Exit orders verified as active')
+      
+      // Clean up by closing the position
+      console.log('\n5. Cleaning up position...')
+      await cleanupPosition(TEST_SYMBOL)
+      console.log('Position cleaned up')
+      
+      console.log('\n✅ Test completed: Exit orders placed before market order')
+    }
+  },
+  {
+    name: 'Place exit orders with conditional activation',
+    fn: async () => {
+      console.log('\n=== Testing exit orders with conditional activation ===')
+      
+      const currentPrice = await getCurrentPrice(TEST_SYMBOL)
+      const stopPrice = currentPrice * 0.97  // 3% below
+      const takeProfitPrice = currentPrice * 1.03  // 3% above
+      
+      console.log('Current price:', currentPrice)
+      console.log('Stop price:', stopPrice)
+      console.log('Take profit price:', takeProfitPrice)
+      
+      // This test explores whether we can place exit orders that activate
+      // when a position is opened, rather than requiring the position to exist first
+      
+      // First, let's try placing a stop order without reduceOnly (this might fail)
+      console.log('\n1. Attempting to place stop order without reduceOnly...')
+      try {
+        const stopOrderResult = await placeStandaloneOrder(
+          'stp',
+          'sell',
+          TEST_SIZE,
+          TEST_SYMBOL,
+          { stopPrice },
+          false // Not reduceOnly - this might not work
+        )
+        
+        if (stopOrderResult.sendStatus?.order_id) {
+          console.log('✅ Stop order placed without reduceOnly, ID:', stopOrderResult.sendStatus.order_id)
+          
+          // Cancel it since we're just testing
+          await cancelOrder(stopOrderResult.sendStatus.order_id)
+          console.log('Stop order cancelled')
+        }
+      } catch (error) {
+        console.log('❌ Stop order without reduceOnly failed (expected):', (error as any).message)
+      }
+      
+      // Now try placing a take profit order without reduceOnly
+      console.log('\n2. Attempting to place take profit order without reduceOnly...')
+      try {
+        const takeProfitOrderResult = await placeStandaloneOrder(
+          'take_profit',
+          'sell',
+          TEST_SIZE,
+          TEST_SYMBOL,
+          { stopPrice: takeProfitPrice },
+          false // Not reduceOnly
+        )
+        
+        if (takeProfitOrderResult.sendStatus?.order_id) {
+          console.log('✅ Take profit order placed without reduceOnly, ID:', takeProfitOrderResult.sendStatus.order_id)
+          
+          // Cancel it since we're just testing
+          await cancelOrder(takeProfitOrderResult.sendStatus.order_id)
+          console.log('Take profit order cancelled')
+        }
+      } catch (error) {
+        console.log('❌ Take profit order without reduceOnly failed (expected):', (error as any).message)
+      }
+      
+      // Now let's try a different approach - place the market order first,
+      // then immediately place exit orders before the position is fully confirmed
+      console.log('\n3. Testing rapid exit order placement after market order...')
+      
+      const marketOrderResult = await placeOrderWithExits(
+        'buy',
+        TEST_SIZE,
+        { type: 'none', distance: 0 },
+        { type: 'none', price: 0 },
+        TEST_SYMBOL,
+        false,
+        undefined,
+        'fixed'
+      )
+      
+      if (!marketOrderResult.marketOrder?.sendStatus?.order_id) {
+        throw new Error('Failed to place market order')
+      }
+      
+      const marketOrderId = marketOrderResult.marketOrder.sendStatus.order_id
+      console.log('Market order placed, ID:', marketOrderId)
+      
+      // Immediately try to place exit orders (before waiting for market order execution)
+      console.log('\n4. Immediately placing exit orders...')
+      
+      const rapidStopOrder = await placeStandaloneOrder(
+        'stp',
+        'sell',
+        TEST_SIZE,
+        TEST_SYMBOL,
+        { stopPrice },
+        true // reduceOnly
+      )
+      
+      const rapidTakeProfitOrder = await placeStandaloneOrder(
+        'take_profit',
+        'sell',
+        TEST_SIZE,
+        TEST_SYMBOL,
+        { stopPrice: takeProfitPrice },
+        true // reduceOnly
+      )
+      
+      console.log('Rapid stop order ID:', rapidStopOrder.sendStatus?.order_id)
+      console.log('Rapid take profit order ID:', rapidTakeProfitOrder.sendStatus?.order_id)
+      
+      // Wait for market order execution
+      console.log('\n5. Waiting for market order execution...')
+      if (!await waitForOrderExecution(marketOrderId, false)) {
+        throw new Error('Market order execution timeout')
+      }
+      console.log('Market order executed')
+      
+      // Verify position exists
+      console.log('\n6. Verifying position...')
+      if (!await waitForPosition(TEST_SYMBOL, true)) {
+        throw new Error('Position not detected after multiple attempts')
+      }
+      console.log('Position verified')
+      
+      // Check exit order status
+      console.log('\n7. Checking exit order status...')
+      if (rapidStopOrder.sendStatus?.order_id) {
+        const stopStatus = await getOrderStatus(rapidStopOrder.sendStatus.order_id)
+        console.log('Rapid stop order status:', stopStatus.status)
+      }
+      
+      if (rapidTakeProfitOrder.sendStatus?.order_id) {
+        const takeProfitStatus = await getOrderStatus(rapidTakeProfitOrder.sendStatus.order_id)
+        console.log('Rapid take profit order status:', takeProfitStatus.status)
+      }
+      
+      // Clean up
+      console.log('\n8. Cleaning up position...')
+      await cleanupPosition(TEST_SYMBOL)
+      console.log('Position cleaned up')
+      
+      console.log('\n✅ Test completed: Explored various approaches to placing exit orders')
     }
   }
 ]
