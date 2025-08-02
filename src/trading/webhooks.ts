@@ -5,8 +5,6 @@ const POSITION_SIZE = 1.0 // % of account risked
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
 
-
-
 /**
  * Executes a trade based on TradingView webhook signal
  * Uses risk-based position sizing with a 7% fixed stop as safety fallback
@@ -109,6 +107,14 @@ export async function executeTradingViewTrade(
       'PF_ETHUSD': 0.001, // ETH minimum 0.001 units
       'PF_BTCUSD': 0.0001, // BTC minimum 0.0001 units
     }
+
+    // Maximum position size for safety
+    const maxPositionSizes: { [key: string]: number } = {
+      'PF_SUIUSD': 2000,    // SUI minimum 1 unit
+      'PF_SOLUSD': 30, // SOL minimum 0.01 units
+      'PF_ETHUSD': 3, // ETH minimum 0.001 units
+      'PF_BTCUSD': 0.06, // BTC minimum 0.0001 units
+    }
     
     const minSize = minPositionSizes[tradingPair] || 0.01
     if (calculatedPositionSize < minSize) {
@@ -117,7 +123,12 @@ export async function executeTradingViewTrade(
       calculatedPositionSize = minSize
     }
     
-
+    const maxSize = maxPositionSizes[tradingPair]
+    if (calculatedPositionSize > maxSize) {
+      console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is above maximum (${maxSize}) for ${tradingPair}`)
+      console.log(`[TradingView Webhook] Using maximum position size: ${maxSize} units`)
+      calculatedPositionSize = maxSize
+    }
 
     // Calculate the fixed stop price for risk sizing
     const currentPrice = await getCurrentPrice(tradingPair)
