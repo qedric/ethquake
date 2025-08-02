@@ -145,11 +145,42 @@ export async function executeTradeStrategy() {
       return
     }
 
-    // Place order with fixed stop for risk sizing, then add trailing stop
+    // First set trailing stop, then place market order with exits if successful
     let orderResult = null
     let trailingStopResult = null
     if (direction === 'buy' || direction === 'sell') {
       console.log(`[Strategy: ethquake] Placing ${direction} order based on signal at ${signalHour.toISOString()}`)
+
+      // Calculate position size once and use for both orders
+      const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
+      console.log(`[Strategy: ethquake] Calculated position size: ${calculatedPositionSize} units`)
+
+      // First, place the trailing stop for profit protection
+      console.log(`[Strategy: ethquake] Placing trailing stop for profit protection at ${TRAILING_STOP_DISTANCE}%`)
+      try {
+        trailingStopResult = await placeStandaloneOrder(
+          'trailing_stop',
+          direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
+          calculatedPositionSize,
+          TRADING_PAIR,
+          { distance: TRAILING_STOP_DISTANCE, deviationUnit: 'PERCENT' },
+          true // reduceOnly
+        )
+
+        if (trailingStopResult?.result === 'success') {
+          console.log(`[Strategy: ethquake] Trailing stop placed successfully at ${TRAILING_STOP_DISTANCE}%`)
+        } else {
+          console.error('[Strategy: ethquake] Failed to place trailing stop:', trailingStopResult?.error)
+          // Don't proceed with market order if trailing stop fails
+          throw new Error('Failed to place trailing stop')
+        }
+      } catch (trailingStopError) {
+        console.error('[Strategy: ethquake] Error placing trailing stop:', trailingStopError)
+        throw new Error('Failed to place trailing stop')
+      }
+
+      // If trailing stop was successful, place market order with fixed stop for risk sizing
+      console.log(`[Strategy: ethquake] Trailing stop successful, placing market order with fixed stop`)
 
       // Calculate the fixed stop price for risk sizing
       const currentPrice = await getCurrentPrice(TRADING_PAIR)
@@ -164,37 +195,8 @@ export async function executeTradeStrategy() {
         stopPrice: fixedStopPrice
       }
 
-      // Place order with fixed stop (this determines position size based on 2% risk)
-      orderResult = await placeOrderWithExits(direction, POSITION_SIZE, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', POSITION_SIZE_TYPE, POSITION_SIZE_PRECISION)
-
-      // If the initial order was successful, place a trailing stop for profit protection
-      if (orderResult?.marketOrder?.result === 'success' && orderResult?.marketOrder?.sendStatus?.order_id) {
-        console.log(`[Strategy: ethquake] Initial order successful, placing trailing stop for profit protection at ${TRAILING_STOP_DISTANCE}%`)
-
-        try {
-          // Calculate position size for the trailing stop (same as main order)
-          const calculatedPositionSize = await calculatePositionSize(POSITION_SIZE, POSITION_SIZE_TYPE, TRADING_PAIR, FIXED_STOP_DISTANCE, POSITION_SIZE_PRECISION)
-          console.log(`[Strategy: ethquake] Calculated position size for trailing stop: ${calculatedPositionSize} units`)
-
-          // Place the trailing stop order (same size as main position)
-          trailingStopResult = await placeStandaloneOrder(
-            'trailing_stop',
-            direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
-            calculatedPositionSize,
-            TRADING_PAIR,
-            { distance: TRAILING_STOP_DISTANCE, deviationUnit: 'PERCENT' },
-            true // reduceOnly
-          )
-
-          if (trailingStopResult?.result === 'success') {
-            console.log(`[Strategy: ethquake] Trailing stop placed successfully at ${TRAILING_STOP_DISTANCE}%`)
-          } else {
-            console.error('[Strategy: ethquake] Failed to place trailing stop:', trailingStopResult?.error)
-          }
-        } catch (trailingStopError) {
-          console.error('[Strategy: ethquake] Error placing trailing stop:', trailingStopError)
-        }
-      }
+      // Place order with fixed stop using the same calculated position size
+      orderResult = await placeOrderWithExits(direction, calculatedPositionSize, fixedStopConfig, { type: 'none', price: 0 }, TRADING_PAIR, false, 'ethquake', 'fixed', POSITION_SIZE_PRECISION)
     }
 
     // Record the signal and order in the database
