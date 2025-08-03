@@ -1,7 +1,7 @@
 import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
-const POSITION_SIZE = 1.0 // % of account risked
+const POSITION_SIZE = 4.0 // % of account risked - based on maximum risk of FIXED_STOP_DISTANCE
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
 
