@@ -124,13 +124,8 @@ router.post('/alert-hook', (req, res) => {
   let sanitizedBody = { ...req.body }
 
   if (webhookSecret && sanitizedBody.message) {
-    console.log('Original message length:', sanitizedBody.message.length)
-    console.log('Secret length:', webhookSecret.length)
     console.log('Message contains secret:', sanitizedBody.message.includes(webhookSecret))
-    
-    sanitizedBody.message = sanitizedBody.message.replace(webhookSecret, '[SECRET_REDACTED]')
-    
-    console.log('Sanitized message length:', sanitizedBody.message.length)
+    sanitizedBody.message = sanitizedBody.message.replace(webhookSecret, '')
     console.log('Message still contains secret:', sanitizedBody.message.includes(webhookSecret))
   }
 
