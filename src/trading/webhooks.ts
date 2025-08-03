@@ -106,6 +106,7 @@ export async function executeTradingViewTrade(
       'PF_SOLUSD': 0.01, // SOL minimum 0.01 units
       'PF_ETHUSD': 0.001, // ETH minimum 0.001 units
       'PF_BTCUSD': 0.0001, // BTC minimum 0.0001 units
+      'PF_WIFUSD': 1, // WIF minimum 0.0001 units
     }
 
     // Maximum position size for safety
@@ -114,6 +115,7 @@ export async function executeTradingViewTrade(
       'PF_SOLUSD': 30, // SOL minimum 0.01 units
       'PF_ETHUSD': 3, // ETH minimum 0.001 units
       'PF_BTCUSD': 0.06, // BTC minimum 0.0001 units
+      'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
     }
     
     const minSize = minPositionSizes[tradingPair] || 0.01
