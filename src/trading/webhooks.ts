@@ -1,9 +1,33 @@
-import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision } from './kraken.js'
+import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
 const POSITION_SIZE = 4.0 // % of account risked - based on maximum risk of FIXED_STOP_DISTANCE
 const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
 const POSITION_SIZE_TYPE = 'risk'
+
+/**
+ * Gets the actual open position for a symbol from the exchange
+ * Returns null if no position exists, or the position object if found
+ */
+async function getActualPosition(symbol: string): Promise<{ side: string, size: number } | null> {
+  try {
+    const response = await getOpenPositions()
+    const positions = response.data.openPositions || []
+    const position = positions.find((pos: any) => pos.symbol === symbol)
+    
+    if (!position) {
+      return null
+    }
+    
+    return {
+      side: position.side,
+      size: position.size
+    }
+  } catch (error) {
+    console.error('Error getting actual position:', error)
+    return null
+  }
+}
 
 /**
  * Executes a trade based on TradingView webhook signal
@@ -46,6 +70,13 @@ export async function executeTradingViewTrade(
     if (positionChange === 'reverse_position') {
       console.log(`[TradingView Webhook] Reverse position detected - closing existing ${trimmedPrevPosition} position first`)
       
+      // Validate that the actual position matches what we expect to close
+      const actualPosition = await getActualPosition(tradingPair)
+      if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
+        console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+        throw new Error(`Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+      }
+      
       // Close the existing position
       const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
       if (!closeResult) {
@@ -59,6 +90,21 @@ export async function executeTradingViewTrade(
     // Handle position close - actually close the existing position
     if (positionChange === 'close_only') {
       console.log(`[TradingView Webhook] Position close detected - closing existing ${trimmedPrevPosition} position`)
+      
+      // Validate that the actual position matches what we expect to close
+      const actualPosition = await getActualPosition(tradingPair)
+      if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
+        console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+        return {
+          success: false,
+          direction,
+          ticker,
+          action: 'position_close',
+          positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
+          message: `Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side}`,
+          error: 'position_mismatch'
+        }
+      }
       
       // Close the existing position
       const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')

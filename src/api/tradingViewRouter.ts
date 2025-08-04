@@ -8,7 +8,7 @@ interface TradingViewAlert {
   strategy: {
     order: {
       action: string
-      contracts: number
+      contracts?: number
     }
     current_position: string
     prev_position: string
