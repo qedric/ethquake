@@ -111,7 +111,7 @@ export async function executeTradeStrategy() {
     console.log('[Strategy: ethquake] ema50:', ema50)
     console.log('[Strategy: ethquake] ema100:', ema100)
 
-    // New direction logic using price and three EMAs
+    // Direction logic using price and three EMAs
     if (price > ema20 && ema20 > ema50 && ema50 > ema100) {
       direction = 'buy'
     } else if (price < ema20 && ema20 < ema50 && ema50 < ema100) {
