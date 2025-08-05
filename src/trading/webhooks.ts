@@ -319,7 +319,10 @@ function mapTickerToTradingPair(ticker: string): string {
     'SUIUSD.PM' : 'PF_SUIUSD',
     'WIFUSD': 'PF_WIFUSD',
     'WIF/USD': 'PF_WIFUSD',
-    'WIFUSD.PM': 'PF_WIFUSD'
+    'WIFUSD.PM': 'PF_WIFUSD',
+    'XRPUSD': 'PF_XRPUSD',
+    'XRP/USD': 'PF_XRPUSD',
+    'XRPUSD.PM': 'PF_XRPUSD'
   }
 
   return mappings[tickerUpper] || tickerUpper

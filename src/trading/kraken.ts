@@ -104,6 +104,7 @@ export function getPositionSizePrecision(tradingPair: string): number {
     'PF_ETHUSD': 3,  // ETH uses 3 decimal places
     'PF_BTCUSD': 4,  // BTC uses 4 decimal places
     'PF_WIFUSD': 0,  // WIF uses 0 decimal places
+    'PF_XRPUSD': 0,  // XRP uses 0 decimal place
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
@@ -120,6 +121,7 @@ export function getPricePrecision(tradingPair: string): number {
     'PF_ETHUSD': 1,  // ETH uses 1 decimal place
     'PF_BTCUSD': 0,  // BTC uses 0 decimal place
     'PF_WIFUSD': 4,  // WIF uses 0 decimal place
+    'PF_XRPUSD': 5,  // XRP uses 4 decimal place
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
