@@ -17,7 +17,7 @@ const API_SECRET = process.env.KRAKEN_PRIVATE_KEY
 * @param {string} nonce
 * @param {string} data
 */
-function getKrakenSignature(urlPath: string, nonce: string, data: string) {
+export function getKrakenSignature(urlPath: string, nonce: string, data: string) {
   const encoded = data + nonce + urlPath
   const sha256Hash = crypto.createHash('sha256').update(encoded).digest()
   const secretBuffer = Buffer.from(API_SECRET || '', 'base64')
