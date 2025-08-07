@@ -3,6 +3,8 @@ import transactionDataRouter from '../api/transactionData.js'
 import visualizationRouter from '../api/visualizationRouter.js'
 import strategiesRouter from '../api/strategiesRouter.js'
 import tradingViewRouter from '../api/tradingViewRouter.js'
+import ledgerRouter from '../api/ledgerRouter.js'
+import ledgerDashboardRouter from '../api/ledgerDashboardRouter.js'
 import path from 'path'
 import basicAuth from 'express-basic-auth'
 import express from 'express'
@@ -181,9 +183,11 @@ async function startServer() {
     // Add the routers BEFORE starting the server
     app.use('/api/transactions', authMiddleware, transactionDataRouter)
     app.use('/api/tv', tradingViewRouter) // TradingView webhooks don't need auth
+    app.use('/api/ledger', authMiddleware, ledgerRouter)
     app.use(express.static(path.join(__dirname, '../public')))
     app.use('/charts', authMiddleware, visualizationRouter)
     app.use('/strategies', authMiddleware, strategiesRouter)
+    app.use('/ledger', authMiddleware, ledgerDashboardRouter)
     
     // Start Express server
     app.listen(PORT, () => {
