@@ -157,6 +157,11 @@ app.get('/status', authMiddleware, async (req, res) => {
   }
 })
 
+// Root endpoint - go away
+app.get('/', (req, res) => {
+  res.send('ethquake server is running. go away.')
+})
+
 // Manual trigger endpoint
 app.post('/run-pipeline/:strategy', authMiddleware, async (req, res) => {
   const { strategy } = req.params

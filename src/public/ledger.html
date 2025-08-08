@@ -13,6 +13,60 @@
       color: #333;
     }
     
+    .nav-header {
+      background-color: #1a1a1a;
+      color: #00ff00;
+      padding: 10px 0;
+      margin: -20px -20px 20px -20px;
+      border-bottom: 1px solid #333;
+      font-family: 'Courier New', monospace;
+    }
+    
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+    }
+    
+    .nav-title {
+      font-size: 1.2em;
+      font-weight: normal;
+      margin: 0;
+      color: #00ff00;
+      width: 200px;
+      flex-shrink: 0;
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 15px;
+    }
+    
+    .nav-links a {
+      color: #00ff00;
+      text-decoration: none;
+      padding: 5px 10px;
+      border: 1px solid #333;
+      background-color: transparent;
+      transition: all 0.2s ease;
+      font-size: 0.9em;
+    }
+    
+    .nav-links a:hover {
+      background-color: #00ff00;
+      color: #1a1a1a;
+      border-color: #00ff00;
+    }
+    
+    .nav-links a.active {
+      background-color: #00ff00;
+      color: #1a1a1a;
+      border-color: #00ff00;
+    }
+    
     .container {
       max-width: 1400px;
       margin: 0 auto;
@@ -330,11 +384,18 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>Kraken Ledger Dashboard</h1>
-      <p>Track your PnL, fees, and trading costs with detailed filtering</p>
+  <div class="nav-header">
+    <div class="nav-container">
+      <h1 class="nav-title">Kraken Ledger Dashboard</h1>
+      <div class="nav-links">
+        <a href="/charts">Charts</a>
+        <a href="/ledger" class="active">Ledger</a>
+        <a href="/strategies">Strategies</a>
+      </div>
     </div>
+  </div>
+
+  <div class="container">
     
     <div class="controls">
       <div class="filters">
