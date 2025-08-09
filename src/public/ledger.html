@@ -291,11 +291,29 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       font-size: 0.85em;
+      border-right: 1px solid #6c757d;
+    }
+    
+    .ledger-table th:last-child {
+      border-right: none;
+    }
+    
+    .ledger-table th.right-align {
+      text-align: right;
+    }
+    
+    .ledger-table th.center-align {
+      text-align: center;
     }
     
     .ledger-table td {
       padding: 12px 15px;
       border-bottom: 1px solid #e9ecef;
+      border-right: 1px solid #f1f3f4;
+    }
+    
+    .ledger-table td:last-child {
+      border-right: none;
     }
     
     .ledger-table tr:hover {
@@ -468,10 +486,10 @@
         <thead>
           <tr>
             <th>Symbol</th>
-            <th>Total PnL</th>
-            <th>Total Fees</th>
-            <th>Net Profit/Loss</th>
-            <th>Trade Count</th>
+            <th class="right-align">Total PnL</th>
+            <th class="right-align">Total Fees</th>
+            <th class="right-align">Net Profit/Loss</th>
+            <th class="right-align">Trade Count</th>
           </tr>
         </thead>
         <tbody id="symbolStatsBody">
@@ -506,10 +524,10 @@
             <th>Type</th>
             <th>Symbol</th>
             <th>Description</th>
-            <th>Amount</th>
-            <th>PnL</th>
-            <th>Fee</th>
-            <th>Balance</th>
+            <th class="right-align">Amount</th>
+            <th class="right-align">PnL</th>
+            <th class="right-align">Fee</th>
+            <th class="right-align">Balance</th>
           </tr>
         </thead>
         <tbody id="ledgerBody">
@@ -840,7 +858,7 @@
           <td class="amount ${stats.totalPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(stats.totalPnL)}</td>
           <td class="amount">${formatCurrency(stats.totalFees)}</td>
           <td class="amount ${netPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(netPnL)}</td>
-          <td>${stats.tradeCount}</td>
+          <td class="amount">${stats.tradeCount}</td>
         `
         tbody.appendChild(row)
       })
