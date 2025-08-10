@@ -70,12 +70,17 @@ export async function executeTradeStrategy() {
       return
     }
 
-    // Check if most recent record was updated within last 30 minutes
+    // Check if we have recent data (most recent record should be from current or previous hour)
     const mostRecentRecord = recentResults[1]
-    const fifteenMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
+    const now = new Date()
+    const currentHourUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()))
+    const previousHourUTC = new Date(currentHourUTC.getTime() - 60 * 60 * 1000)
 
-    if (mostRecentRecord.updated_at < fifteenMinutesAgo) {
-      console.log('[Strategy: ethquake] Most recent record is too old:', mostRecentRecord.updated_at)
+    if (mostRecentRecord.timestamp < previousHourUTC) {
+      console.log('[Strategy: ethquake] Most recent record is too old:', mostRecentRecord.timestamp)
+      console.log('[Strategy: ethquake] Current hour UTC:', currentHourUTC)
+      console.log('[Strategy: ethquake] Previous hour UTC:', previousHourUTC)
+      console.log('[Strategy: ethquake] This suggests the data collection may not be working properly')
       return
     }
 

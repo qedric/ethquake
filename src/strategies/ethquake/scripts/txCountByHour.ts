@@ -149,6 +149,9 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
     if (newResults.length === 0 && updatesToMake.length === 0) {
       console.log('[Strategy: ethquake] No changes needed to analysis results')
     }
+
+    // Ensure we have recent hourly records (current and previous hour) even if no transactions
+    await ensureRecentHourlyRecords(db)
     
     return analysisResults
   } catch (error) {
@@ -182,6 +185,60 @@ function formatDateHour(date: Date): string {
   const hour = date.getUTCHours().toString().padStart(2, '0')
   
   return `${day}/${month}/${year} - ${hour}`
+}
+
+// Ensure we have recent hourly records even if no transactions occurred
+async function ensureRecentHourlyRecords(db: any) {
+  const now = new Date()
+  const currentHourUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()))
+  const previousHourUTC = new Date(currentHourUTC.getTime() - 60 * 60 * 1000)
+
+  console.log(`[Strategy: ethquake] Ensuring recent hourly records exist...`)
+  console.log(`[Strategy: ethquake] Current hour UTC: ${currentHourUTC.toISOString()}`)
+  console.log(`[Strategy: ethquake] Previous hour UTC: ${previousHourUTC.toISOString()}`)
+
+  // Check if we have records for current and previous hour
+  const existingRecords = await db.collection('transactions_per_hour')
+    .find({
+      timestamp: { $in: [currentHourUTC, previousHourUTC] }
+    })
+    .toArray()
+
+  console.log(`[Strategy: ethquake] Found ${existingRecords.length} existing records for recent hours`)
+
+  const existingTimestamps = new Set(existingRecords.map((r: any) => r.timestamp.getTime()))
+
+  // Create records for missing hours
+  const recordsToCreate = []
+  
+  if (!existingTimestamps.has(currentHourUTC.getTime())) {
+    console.log(`[Strategy: ethquake] Missing record for current hour: ${currentHourUTC.toISOString()}`)
+    recordsToCreate.push({
+      timestamp: currentHourUTC,
+      hour: currentHourUTC.getUTCHours(),
+      count: 0,
+      created_at: new Date(),
+      display_date_hour: formatDateHour(currentHourUTC)
+    })
+  }
+  
+  if (!existingTimestamps.has(previousHourUTC.getTime())) {
+    console.log(`[Strategy: ethquake] Missing record for previous hour: ${previousHourUTC.toISOString()}`)
+    recordsToCreate.push({
+      timestamp: previousHourUTC,
+      hour: previousHourUTC.getUTCHours(),
+      count: 0,
+      created_at: new Date(),
+      display_date_hour: formatDateHour(previousHourUTC)
+    })
+  }
+
+  if (recordsToCreate.length > 0) {
+    await db.collection('transactions_per_hour').insertMany(recordsToCreate)
+    console.log(`[Strategy: ethquake] Created ${recordsToCreate.length} missing hourly records for recent hours`)
+  } else {
+    console.log(`[Strategy: ethquake] All recent hourly records already exist`)
+  }
 }
 
 // Migrate data from old collection to new one
@@ -260,4 +317,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     })
 }
 
-export { countTransactionsByHour, migrateToNewCollection }
+export { countTransactionsByHour, migrateToNewCollection, ensureRecentHourlyRecords }
