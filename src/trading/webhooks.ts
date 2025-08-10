@@ -1,9 +1,53 @@
 import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
-const POSITION_SIZE = 5.0 // % of account risked - based on maximum risk of FIXED_STOP_DISTANCE
-const FIXED_STOP_DISTANCE = 7 // % fixed stop as safety fallback
-const POSITION_SIZE_TYPE = 'risk'
+/**
+ * Gets the position size percentage for a given symbol
+ * Returns the percentage of account to risk based on the instrument
+ */
+function getPositionSize(symbol: string): number {
+  const positionSizes: { [key: string]: number } = {
+    'PF_SUIUSD': 6.0,    // SUI - 
+    'PF_SOLUSD': 6.0,    // SOL - 
+    'PF_WIFUSD': 3.0,    // WIF - 
+    'PF_XRPUSD': 2.0,    // XRP - 
+  }
+  
+  return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
+}
+
+/**
+ * Gets the fixed stop distance percentage for a given symbol
+ * Returns the percentage stop distance as safety fallback
+ */
+function getFixedStopDistance(symbol: string): number {
+  const stopDistances: { [key: string]: number } = {
+    'PF_SUIUSD': 3,
+    'PF_SOLUSD': 6,
+    'PF_ETHUSD': 2,
+    'PF_XBTUSD': 5,
+    'PF_WIFUSD': 5,
+    'PF_XRPUSD': 3,
+  }
+  
+  return stopDistances[symbol] || 7 // Default to 7% if symbol not found
+}
+
+/**
+ * Gets the position size type for a given symbol
+ * Currently all instruments use risk-based sizing
+ */
+function getPositionSizeType(symbol: string): 'risk' | 'percent' | 'fixed' {
+  const positionSizeTypes: { [key: string]: 'risk' | 'percent' | 'fixed' } = {
+    'PF_SUIUSD': 'risk',
+    'PF_SOLUSD': 'risk',
+    'PF_ETHUSD': 'risk',
+    'PF_XBTUSD': 'risk',
+    'PF_WIFUSD': 'risk',
+    'PF_XRPUSD': 'risk'
+  }
+  return positionSizeTypes[symbol] || 'risk' // All instruments currently use risk-based sizing
+}
 
 /**
  * Gets the actual open position for a symbol from the exchange
@@ -31,7 +75,7 @@ async function getActualPosition(symbol: string): Promise<{ side: string, size: 
 
 /**
  * Executes a trade based on TradingView webhook signal
- * Uses risk-based position sizing with a 7% fixed stop as safety fallback
+ * Uses risk-based position sizing with dynamic fixed stops per instrument
  * Handles position changes intelligently based on current and previous positions
  */
 export async function executeTradingViewTrade(
@@ -138,10 +182,10 @@ export async function executeTradingViewTrade(
     const precision = getPositionSizePrecision(tradingPair)
     
     let calculatedPositionSize = await calculatePositionSize(
-      POSITION_SIZE, 
-      POSITION_SIZE_TYPE, 
+      getPositionSize(tradingPair), 
+      getPositionSizeType(tradingPair), 
       tradingPair, 
-      FIXED_STOP_DISTANCE, 
+      getFixedStopDistance(tradingPair), 
       precision
     )
     console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
@@ -180,15 +224,16 @@ export async function executeTradingViewTrade(
 
     // Calculate the fixed stop price for risk sizing
     const currentPrice = await getCurrentPrice(tradingPair)
+    const fixedStopDistance = getFixedStopDistance(tradingPair)
     const fixedStopPrice = roundPrice(direction === 'buy'
-      ? currentPrice * (1 - FIXED_STOP_DISTANCE / 100) // For buy orders, stop below current price
-      : currentPrice * (1 + FIXED_STOP_DISTANCE / 100) // For sell orders, stop above current price
+      ? currentPrice * (1 - fixedStopDistance / 100) // For buy orders, stop below current price
+      : currentPrice * (1 + fixedStopDistance / 100) // For sell orders, stop above current price
     , getPricePrecision(tradingPair))
 
     console.log(`[TradingView Webhook] Current price: ${currentPrice}, Fixed stop price: ${fixedStopPrice}`)
 
     // First, place the fixed stop for risk protection
-    console.log(`[TradingView Webhook] Placing fixed stop for risk protection at ${FIXED_STOP_DISTANCE}%`)
+    console.log(`[TradingView Webhook] Placing fixed stop for risk protection at ${fixedStopDistance}%`)
     let fixedStopResult = null
     let marketOrderResult = null
     
@@ -239,8 +284,8 @@ export async function executeTradingViewTrade(
     const stopStatus = fixedStopResult?.sendStatus?.status || 'failed'
     
     const alertMessage = positionChange === 'reverse_position' 
-      ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
-      : `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (7%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+      ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+      : `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
 
     console.log('alertMessage', alertMessage)
     
