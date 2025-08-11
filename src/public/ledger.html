@@ -348,6 +348,51 @@
       font-size: 0.9em;
     }
     
+    .ledger-table .expand-toggle {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      line-height: 18px;
+      text-align: center;
+      background-color: #4a4a4a;
+      color: #e0e0e0;
+      border-radius: 3px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+    
+    .ledger-table .expand-toggle:hover {
+      background-color: #667eea;
+      color: white;
+    }
+    
+    .ledger-table .group-row {
+      background-color: #3a3a3a;
+      font-weight: 600;
+    }
+    
+    .ledger-table .group-row:hover {
+      background-color: #4a4a4a;
+    }
+    
+    .ledger-table .group-row.expanded {
+      background-color: #4a4a4a;
+    }
+    
+    .ledger-table .detail-row {
+      background-color: #2d2d2d;
+    }
+    
+    .ledger-table .detail-row:hover {
+      background-color: #3a3a3a;
+    }
+    
+    .ledger-table .detail-indent {
+      padding-left: 40px;
+    }
+    
     .pagination {
       display: flex;
       justify-content: center;
@@ -533,10 +578,10 @@
       <table class="ledger-table" id="ledgerTable" style="display: none;">
         <thead>
           <tr>
+            <th style="width: 30px;"></th>
             <th>Date</th>
             <th>Type</th>
             <th>Symbol</th>
-            <th>Description</th>
             <th class="right-align">Amount</th>
             <th class="right-align">PnL</th>
             <th class="right-align">Fee</th>
@@ -703,39 +748,191 @@
       
       tbody.innerHTML = ''
       
-      entries.forEach((entry, index) => {
-        console.log(`Processing entry ${index}:`, entry)
-        const row = document.createElement('tr')
-        
-        const date = new Date(entry.time * 1000).toLocaleString(navigator.language, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          timeZoneName: 'short'
-        })
-        const amount = parseFloat(entry.amount)
-        const balance = parseFloat(entry.balance)
-        
-        // Calculate PnL and fee for display
-        const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : null
-        const fee = entry.fee ? parseFloat(entry.fee) : null
-        
-        row.innerHTML = `
-          <td class="date">${date}</td>
-          <td class="type">${entry.type}</td>
-          <td>${entry.symbol || '-'}</td>
-          <td>${entry.description || '-'}</td>
-          <td class="amount ${amount >= 0 ? 'positive' : 'negative'}">${amount}</td>
-          <td class="amount ${pnl !== null ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${pnl !== null ? formatCurrency(pnl) : '-'}</td>
-          <td class="amount ${fee !== null ? 'negative' : ''}">${fee !== null ? formatCurrency(fee) : '-'}</td>
-          <td class="amount">${balance}</td>
-        `
-        
-        tbody.appendChild(row)
+      // Group entries by Date, Type, and Symbol
+      const groupedEntries = groupEntries(entries)
+      
+      groupedEntries.forEach((group, groupIndex) => {
+        if (group.isGrouped) {
+          // Create grouped row
+          const groupRow = document.createElement('tr')
+          groupRow.className = 'group-row'
+          groupRow.dataset.groupIndex = groupIndex
+          
+          const date = new Date(group.entries[0].time * 1000).toLocaleString(navigator.language, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZoneName: 'short'
+          })
+          
+          const totalAmount = group.entries.reduce((sum, entry) => sum + parseFloat(entry.amount), 0)
+          const totalPnL = group.entries.reduce((sum, entry) => {
+            const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : 0
+            return sum + pnl
+          }, 0)
+          const totalFee = group.entries.reduce((sum, entry) => {
+            const fee = entry.fee ? parseFloat(entry.fee) : 0
+            return sum + fee
+          }, 0)
+          const lastBalance = parseFloat(group.entries[0].balance)
+          
+          groupRow.innerHTML = `
+            <td>
+              <span class="expand-toggle" onclick="toggleGroup(${groupIndex})">+</span>
+            </td>
+            <td class="date">${date}</td>
+            <td class="type">${group.entries[0].type}</td>
+            <td>${group.entries[0].symbol || '-'}</td>
+            <td class="amount ${totalAmount >= 0 ? 'positive' : 'negative'}">${totalAmount}</td>
+            <td class="amount ${totalPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(totalPnL)}</td>
+            <td class="amount negative">${formatCurrency(totalFee)}</td>
+            <td class="amount">${lastBalance}</td>
+          `
+          
+          tbody.appendChild(groupRow)
+          
+          // Create detail rows (initially hidden)
+          group.entries.forEach((entry, entryIndex) => {
+            const detailRow = document.createElement('tr')
+            detailRow.className = 'detail-row'
+            detailRow.dataset.groupIndex = groupIndex
+            detailRow.style.display = 'none'
+            
+            const entryDate = new Date(entry.time * 1000).toLocaleString(navigator.language, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              timeZoneName: 'short'
+            })
+            const amount = parseFloat(entry.amount)
+            const balance = parseFloat(entry.balance)
+            
+            // Calculate PnL and fee for display
+            const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : null
+            const fee = entry.fee ? parseFloat(entry.fee) : null
+            
+            detailRow.innerHTML = `
+              <td></td>
+              <td class="date detail-indent">${entryDate}</td>
+              <td class="type">${entry.type}</td>
+              <td>${entry.symbol || '-'}</td>
+              <td class="amount ${amount >= 0 ? 'positive' : 'negative'}">${amount}</td>
+              <td class="amount ${pnl !== null ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${pnl !== null ? formatCurrency(pnl) : '-'}</td>
+              <td class="amount ${fee !== null ? 'negative' : ''}">${fee !== null ? formatCurrency(fee) : '-'}</td>
+              <td class="amount">${balance}</td>
+            `
+            
+            tbody.appendChild(detailRow)
+          })
+        } else {
+          // Single entry (not grouped)
+          const entry = group.entries[0]
+          const row = document.createElement('tr')
+          
+          const date = new Date(entry.time * 1000).toLocaleString(navigator.language, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZoneName: 'short'
+          })
+          const amount = parseFloat(entry.amount)
+          const balance = parseFloat(entry.balance)
+          
+          // Calculate PnL and fee for display
+          const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : null
+          const fee = entry.fee ? parseFloat(entry.fee) : null
+          
+          row.innerHTML = `
+            <td></td>
+            <td class="date">${date}</td>
+            <td class="type">${entry.type}</td>
+            <td>${entry.symbol || '-'}</td>
+            <td class="amount ${amount >= 0 ? 'positive' : 'negative'}">${amount}</td>
+            <td class="amount ${pnl !== null ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${pnl !== null ? formatCurrency(pnl) : '-'}</td>
+            <td class="amount ${fee !== null ? 'negative' : ''}">${fee !== null ? formatCurrency(fee) : '-'}</td>
+            <td class="amount">${balance}</td>
+          `
+          
+          tbody.appendChild(row)
+        }
       })
+    }
+    
+    // Group entries by Date, Type, and Symbol
+    function groupEntries(entries) {
+      const groups = []
+      let currentGroup = null
+      
+      entries.forEach(entry => {
+        const date = new Date(entry.time * 1000).toLocaleDateString()
+        const type = entry.type
+        const symbol = entry.symbol || '-'
+        
+        // Check if this entry should be grouped with the previous one
+        if (currentGroup && 
+            currentGroup.date === date && 
+            currentGroup.type === type && 
+            currentGroup.symbol === symbol) {
+          // Add to current group
+          currentGroup.entries.push(entry)
+        } else {
+          // Start new group
+          if (currentGroup) {
+            groups.push(currentGroup)
+          }
+          currentGroup = {
+            date: date,
+            type: type,
+            symbol: symbol,
+            entries: [entry],
+            isGrouped: false
+          }
+        }
+      })
+      
+      // Add the last group
+      if (currentGroup) {
+        groups.push(currentGroup)
+      }
+      
+      // Mark groups with multiple entries as grouped
+      groups.forEach(group => {
+        if (group.entries.length > 1) {
+          group.isGrouped = true
+        }
+      })
+      
+      return groups
+    }
+    
+    // Toggle group expansion
+    function toggleGroup(groupIndex) {
+      const groupRow = document.querySelector(`tr[data-group-index="${groupIndex}"].group-row`)
+      const detailRows = document.querySelectorAll(`tr[data-group-index="${groupIndex}"].detail-row`)
+      const toggleSpan = groupRow.querySelector('.expand-toggle')
+      
+      const isExpanded = detailRows[0].style.display !== 'none'
+      
+      if (isExpanded) {
+        // Collapse
+        detailRows.forEach(row => row.style.display = 'none')
+        toggleSpan.textContent = '+'
+        groupRow.classList.remove('expanded')
+      } else {
+        // Expand
+        detailRows.forEach(row => row.style.display = 'table-row')
+        toggleSpan.textContent = '−'
+        groupRow.classList.add('expanded')
+      }
     }
     
     // Update pagination controls
