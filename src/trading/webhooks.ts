@@ -7,7 +7,7 @@ import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePo
  */
 function getPositionSize(symbol: string): number {
   const positionSizes: { [key: string]: number } = {
-    'PF_SUIUSD': 4.0,    // SUI - 
+    'PF_SUIUSD': 3.0,    // SUI - 
     'PF_SOLUSD': 4.0,    // SOL - 
     'PF_WIFUSD': 3.0,    // WIF - 
     'PF_XRPUSD': 2.0,    // XRP - 
