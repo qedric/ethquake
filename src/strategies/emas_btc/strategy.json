@@ -6,7 +6,7 @@
     "cronSchedule": "2 * * * *",
     "trading": {
         "symbol": "PF_XBTUSD",
-        "position_size": 2.5,
+        "position_size": 3.5,
         "position_size_type": "risk",
         "position_size_precision": 4,
         "timeframe": 60
