@@ -6,7 +6,7 @@ import { sendAlert } from '../../alerts/index.js'
 const COOLDOWN_HOURS = 48 // no new trades within this time period
 const SIGNAL_THRESHOLD = 40 // two consecutive hours with with a sum of counts exceeding this threshold
 const ALERT_THRESHOLD = 40 // if the most recent hour has a count exceeding this threshold, send an alert
-const POSITION_SIZE = 6 // % of account risked - this combines with the fixed stop distance to determine the position size
+const POSITION_SIZE = 2 // % of account risked - this combines with the fixed stop distance to determine the position size
 const POSITION_SIZE_PRECISION = 3 // decimal places for position size rounding
 const TRADING_PAIR = 'PF_ETHUSD'
 const FIXED_STOP_DISTANCE = 2 // % fixed stop - this combines with the position size to determine the stop price

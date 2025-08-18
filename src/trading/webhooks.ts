@@ -9,8 +9,9 @@ function getPositionSize(symbol: string): number {
   const positionSizes: { [key: string]: number } = {
     'PF_SUIUSD': 3.0,    // SUI - 
     'PF_SOLUSD': 4.0,    // SOL - 
-    'PF_WIFUSD': 3.5,    // WIF - 
+    'PF_WIFUSD': 4.0,    // WIF - 
     'PF_XRPUSD': 2.0,    // XRP - 
+    'PF_ETHUSD': 3.0,    // ETH - 
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -24,7 +25,7 @@ function getFixedStopDistance(symbol: string): number {
   const stopDistances: { [key: string]: number } = {
     'PF_SUIUSD': 4,
     'PF_SOLUSD': 6,
-    'PF_ETHUSD': 2,
+    'PF_ETHUSD': 2.5,
     'PF_XBTUSD': 5,
     'PF_WIFUSD': 4,
     'PF_XRPUSD': 3,
