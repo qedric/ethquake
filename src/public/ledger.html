@@ -526,6 +526,11 @@
       </div>
       
       <div class="summary-card">
+        <h3>Profit Factor</h3>
+        <p class="value" id="profitFactor">N/A</p>
+      </div>
+      
+      <div class="summary-card">
         <h3>Trade Count</h3>
         <p class="value" id="tradeCount">0</p>
       </div>
@@ -547,6 +552,7 @@
             <th class="right-align">Total PnL</th>
             <th class="right-align">Total Fees</th>
             <th class="right-align">Net Profit/Loss</th>
+            <th class="right-align">Profit Factor</th>
             <th class="right-align">Trade Count</th>
           </tr>
         </thead>
@@ -721,6 +727,24 @@
       const netPnL = summary.totalPnL - summary.totalFees
       document.getElementById('netPnL').textContent = formatCurrency(netPnL)
       document.getElementById('netPnL').className = `value ${netPnL >= 0 ? 'positive' : 'negative'}`
+      
+      // Calculate Profit Factor (using only realizedPnL, not fees)
+      let profits = 0
+      let losses = 0
+      allEntries.forEach(entry => {
+        const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : 0
+        if (pnl > 0) profits += pnl
+        if (pnl < 0) losses += pnl
+      })
+      let profitFactor = 'N/A'
+      const lossAbs = Math.abs(losses)
+      if (profits > 0 && lossAbs > 0.01) {
+        profitFactor = (profits / lossAbs).toFixed(2)
+      } else if (profits > 0 && lossAbs <= 0.01) {
+        profitFactor = '∞'
+      }
+      document.getElementById('profitFactor').textContent = profitFactor
+      document.getElementById('profitFactor').className = 'value neutral'
       
       document.getElementById('tradeCount').textContent = summary.tradeCount.toString()
       document.getElementById('tradeCount').className = 'value neutral'
@@ -1061,6 +1085,23 @@
       
       Object.entries(symbolStats).forEach(([symbol, stats]) => {
         const netPnL = stats.totalPnL - stats.totalFees
+        // Calculate profit factor for this symbol (using only realizedPnL, not fees)
+        let profits = 0
+        let losses = 0
+        filteredEntries.forEach(entry => {
+          if (entry.symbol === symbol) {
+            const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : 0
+            if (pnl > 0) profits += pnl
+            if (pnl < 0) losses += pnl
+          }
+        })
+        let profitFactor = 'N/A'
+        const lossAbs = Math.abs(losses)
+        if (profits > 0 && lossAbs > 0.01) {
+          profitFactor = (profits / lossAbs).toFixed(2)
+        } else if (profits > 0 && lossAbs <= 0.01) {
+          profitFactor = '∞'
+        }
         
         const row = document.createElement('tr')
         row.innerHTML = `
@@ -1068,6 +1109,7 @@
           <td class="amount ${stats.totalPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(stats.totalPnL)}</td>
           <td class="amount">${formatCurrency(stats.totalFees)}</td>
           <td class="amount ${netPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(netPnL)}</td>
+          <td class="amount">${profitFactor}</td>
           <td class="amount">${stats.tradeCount}</td>
         `
         tbody.appendChild(row)
