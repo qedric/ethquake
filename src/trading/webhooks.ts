@@ -48,11 +48,11 @@ async function verifyOrderPlaced(orderId: string, isStopOrder: boolean = true): 
  */
 function getPositionSize(symbol: string): number {
   const positionSizes: { [key: string]: number } = {
-    'PF_SUIUSD': 3.0,    // SUI - 
-    'PF_SOLUSD': 4.0,    // SOL - 
-    'PF_WIFUSD': 4.0,    // WIF - 
+    'PF_SUIUSD': 2.0,    // SUI - 
+    'PF_SOLUSD': 3.0,    // SOL - 
+    'PF_WIFUSD': 3.0,    // WIF - 
     'PF_XRPUSD': 2.0,    // XRP - 
-    'PF_ETHUSD': 3.0,    // ETH - 
+    'PF_ETHUSD': 2.0,    // ETH - 
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
