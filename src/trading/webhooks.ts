@@ -1,4 +1,4 @@
-import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions } from './kraken.js'
+import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions, getOrderStatus } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
 // Per-symbol async lock to serialize webhook processing for each trading pair
@@ -23,6 +23,23 @@ async function acquireSymbolLock(symbol: string): Promise<() => void> {
     }
     symbolLocks.delete(symbol)
   }
+}
+
+// Verify an order has reached an active placed/trigger state
+async function verifyOrderPlaced(orderId: string, isStopOrder: boolean = true): Promise<boolean> {
+  const maxAttempts = 3
+  const delayMs = 1000
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const status = await getOrderStatus(orderId)
+      const validStates = isStopOrder ? ['placed', 'TRIGGER_PLACED'] : ['placed', 'FULLY_EXECUTED']
+      if (validStates.includes(status.status)) return true
+    } catch (err) {
+      // Retry on lookup failure
+    }
+    await new Promise(res => setTimeout(res, delayMs))
+  }
+  return false
 }
 
 /**
@@ -291,6 +308,14 @@ export async function executeTradingViewTrade(
         )
 
       if (fixedStopResult?.result === 'success') {
+        const stopOrderId = fixedStopResult?.sendStatus?.order_id
+        if (!stopOrderId) {
+          throw new Error('Fixed stop did not return an order_id')
+        }
+        const verified = await verifyOrderPlaced(stopOrderId, true)
+        if (!verified) {
+          throw new Error('Failed to verify fixed stop order placement')
+        }
         console.log(`[TradingView Webhook] Fixed stop placed successfully at ${fixedStopPrice}`)
       } else {
         console.error('[TradingView Webhook] Failed to place fixed stop:', fixedStopResult?.error)
