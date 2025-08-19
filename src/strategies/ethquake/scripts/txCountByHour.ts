@@ -193,7 +193,7 @@ async function ensureRecentHourlyRecords(db: any) {
   const currentHourUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()))
   const previousHourUTC = new Date(currentHourUTC.getTime() - 60 * 60 * 1000)
 
-  console.log(`[Strategy: ethquake] Ensuring recent hourly records exist...`)
+  console.log('[Strategy: ethquake] Ensuring recent hourly records exist...')
   console.log(`[Strategy: ethquake] Current hour UTC: ${currentHourUTC.toISOString()}`)
   console.log(`[Strategy: ethquake] Previous hour UTC: ${previousHourUTC.toISOString()}`)
 
@@ -237,7 +237,7 @@ async function ensureRecentHourlyRecords(db: any) {
     await db.collection('transactions_per_hour').insertMany(recordsToCreate)
     console.log(`[Strategy: ethquake] Created ${recordsToCreate.length} missing hourly records for recent hours`)
   } else {
-    console.log(`[Strategy: ethquake] All recent hourly records already exist`)
+    console.log('[Strategy: ethquake] All recent hourly records already exist')
   }
 }
 
