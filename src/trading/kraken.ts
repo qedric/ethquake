@@ -251,20 +251,8 @@ export async function calculatePositionSize(
     // Round to specified precision or use default
     const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
 
-    let calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    const calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
     console.log(`[Symbol: ${symbol}] Calculated position size: ${calculatedSize} units`)
-    // temp protection until we've confirmed the position size calculation is working
-    if (symbol === 'PF_XBTUSD' && calculatedSize > 0.02) {
-      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
-      calculatedSize = 0.02
-    } else if (symbol === 'PF_ETHUSD' && calculatedSize > 2.5) {
-      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
-      calculatedSize = 2.5
-    } else if (symbol === 'PF_SOLUSD' && calculatedSize > 10) {
-      console.log(`[Strategy: ethquake] Calculated position size is too large: ${calculatedSize} units`)
-      calculatedSize = 10
-    }
-
     return calculatedSize
   }
 
