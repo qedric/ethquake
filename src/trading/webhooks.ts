@@ -1,6 +1,30 @@
 import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions } from './kraken.js'
 //import { sendAlert } from '../alerts/index.js'
 
+// Per-symbol async lock to serialize webhook processing for each trading pair
+const symbolLocks = new Map<string, Promise<void>>()
+const symbolResolvers = new Map<string, () => void>()
+
+async function acquireSymbolLock(symbol: string): Promise<() => void> {
+  while (symbolLocks.has(symbol)) {
+    await symbolLocks.get(symbol)
+  }
+  let releaseFn: () => void = () => {}
+  const lockPromise = new Promise<void>(resolve => {
+    releaseFn = resolve
+  })
+  symbolLocks.set(symbol, lockPromise)
+  symbolResolvers.set(symbol, releaseFn)
+  return () => {
+    const release = symbolResolvers.get(symbol)
+    if (release) {
+      release()
+      symbolResolvers.delete(symbol)
+    }
+    symbolLocks.delete(symbol)
+  }
+}
+
 /**
  * Gets the position size percentage for a given symbol
  * Returns the percentage of account to risk based on the instrument
@@ -103,93 +127,111 @@ export async function executeTradingViewTrade(
       throw new Error(`Invalid position values: current=${currentPosition}, prev=${prevPosition}. Must be 'long', 'short', or 'flat'`)
     }
 
-    // Determine the type of position change
-    const positionChange = determinePositionChange(trimmedPrevPosition, trimmedCurrentPosition)
-    console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${trimmedPrevPosition} to ${trimmedCurrentPosition} based on ${direction} signal`)
-
-    // Map ticker to Kraken trading pair if needed
+    // Map ticker to Kraken trading pair and acquire per-symbol lock
     const tradingPair = mapTickerToTradingPair(ticker)
     console.log(`[TradingView Webhook] Mapped ${ticker} to trading pair: ${tradingPair}`)
-
-    // Handle reverse position changes - close existing position first
-    if (positionChange === 'reverse_position') {
-      console.log(`[TradingView Webhook] Reverse position detected - closing existing ${trimmedPrevPosition} position first`)
-      
-      // Validate that the actual position matches what we expect to close
-      const actualPosition = await getActualPosition(tradingPair)
-      if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
-        console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
-        throw new Error(`Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
-      }
-      
-      // Close the existing position
-      const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
-      if (!closeResult) {
-        throw new Error(`Failed to close existing ${trimmedPrevPosition} position for ${ticker}`)
-      }
-      
-      console.log(`[TradingView Webhook] Successfully closed existing position for ${ticker}`)
-      //sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`)
-    }
-
-    // Handle position close - actually close the existing position
-    if (positionChange === 'close_only') {
-      console.log(`[TradingView Webhook] Position close detected - closing existing ${trimmedPrevPosition} position`)
-      
-      // Validate that the actual position matches what we expect to close
-      const actualPosition = await getActualPosition(tradingPair)
-      if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
-        console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
-        return {
-          success: false,
-          direction,
-          ticker,
-          action: 'position_close',
-          positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
-          message: `Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side}`,
-          error: 'position_mismatch'
+    const releaseLock = await acquireSymbolLock(tradingPair)
+    try {
+      // Reconcile with actual exchange position to avoid misclassification
+      let effectivePrevPosition = trimmedPrevPosition
+      try {
+        const actual = await getActualPosition(tradingPair)
+        if (actual) {
+          if (actual.side !== trimmedPrevPosition) {
+            console.warn(`[TradingView Webhook] Correcting prev position from ${trimmedPrevPosition} to ${actual.side} based on exchange state`)
+            effectivePrevPosition = actual.side
+          }
+        } else if (trimmedPrevPosition !== 'flat') {
+          console.warn(`[TradingView Webhook] No actual position found but prev reported as ${trimmedPrevPosition}. Treating prev as flat`)
+          effectivePrevPosition = 'flat'
         }
+      } catch (posErr) {
+        console.warn('[TradingView Webhook] Failed to get actual position, proceeding with webhook positions:', posErr)
       }
-      
-      // Close the existing position
-      const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
-      if (!closeResult) {
-        console.log(`[TradingView Webhook] No current position found for ${ticker} - nothing to close`)
+
+      // Determine the type of position change using reconciled prev
+      const positionChange = determinePositionChange(effectivePrevPosition, trimmedCurrentPosition)
+      console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${effectivePrevPosition} to ${trimmedCurrentPosition} based on ${direction} signal`)
+
+      // Handle reverse position changes - close existing position first
+      if (positionChange === 'reverse_position') {
+        console.log(`[TradingView Webhook] Reverse position detected - closing existing ${trimmedPrevPosition} position first`)
+        
+        // Validate that the actual position matches what we expect to close
+        const actualPosition = await getActualPosition(tradingPair)
+        if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
+          console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+          throw new Error(`Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+        }
+        
+        // Close the existing position
+        const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
+        if (!closeResult) {
+          throw new Error(`Failed to close existing ${trimmedPrevPosition} position for ${ticker}`)
+        }
+        
+        console.log(`[TradingView Webhook] Successfully closed existing position for ${ticker}`)
+        //sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`)
+      }
+
+      // Handle position close - actually close the existing position
+      if (positionChange === 'close_only') {
+        console.log(`[TradingView Webhook] Position close detected - closing existing ${trimmedPrevPosition} position`)
+        
+        // Validate that the actual position matches what we expect to close
+        const actualPosition = await getActualPosition(tradingPair)
+        if (actualPosition && actualPosition.side !== trimmedPrevPosition) {
+          console.warn(`[TradingView Webhook] Position mismatch! Expected ${trimmedPrevPosition} but found ${actualPosition.side} position for ${ticker}`)
+          return {
+            success: false,
+            direction,
+            ticker,
+            action: 'position_close',
+            positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
+            message: `Position mismatch: expected ${trimmedPrevPosition} but found ${actualPosition.side}`,
+            error: 'position_mismatch'
+          }
+        }
+        
+        // Close the existing position
+        const closeResult = await cleanupPosition(tradingPair, 'tradingview_webhook')
+        if (!closeResult) {
+          console.log(`[TradingView Webhook] No current position found for ${ticker} - nothing to close`)
+          return {
+            success: true,
+            direction,
+            ticker,
+            action: 'position_close',
+            positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
+            message: 'No current position found - nothing to close'
+          }
+        }
+        
+        console.log(`[TradingView Webhook] Successfully closed ${trimmedPrevPosition} position for ${ticker}`)
+        //sendAlert(`TradingView position close for ${ticker}: Closed ${trimmedPrevPosition} position`)
+        
         return {
           success: true,
           direction,
           ticker,
           action: 'position_close',
           positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
-          message: 'No current position found - nothing to close'
+          message: 'Position successfully closed',
+          positionClosed: trimmedPrevPosition
         }
       }
-      
-      console.log(`[TradingView Webhook] Successfully closed ${trimmedPrevPosition} position for ${ticker}`)
-      //sendAlert(`TradingView position close for ${ticker}: Closed ${trimmedPrevPosition} position`)
-      
-      return {
-        success: true,
-        direction,
-        ticker,
-        action: 'position_close',
-        positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
-        message: 'Position successfully closed',
-        positionClosed: trimmedPrevPosition
-      }
-    }
 
-    // Calculate position size based on risk
-    const precision = getPositionSizePrecision(tradingPair)
+      // Calculate position size based on risk
+      const precision = getPositionSizePrecision(tradingPair)
     
-    let calculatedPositionSize = await calculatePositionSize(
-      getPositionSize(tradingPair), 
-      getPositionSizeType(tradingPair), 
-      tradingPair, 
-      getFixedStopDistance(tradingPair), 
-      precision
-    )
-    console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
+      let calculatedPositionSize = await calculatePositionSize(
+        getPositionSize(tradingPair), 
+        getPositionSizeType(tradingPair), 
+        tradingPair, 
+        getFixedStopDistance(tradingPair), 
+        precision
+      )
+      console.log(`[TradingView Webhook] Calculated position size: ${calculatedPositionSize} units`)
 
     // Validate minimum position size requirements
     const minPositionSizes: { [key: string]: number } = {
@@ -209,44 +251,44 @@ export async function executeTradingViewTrade(
       'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
     }
     
-    const minSize = minPositionSizes[tradingPair] || 0.01
-    if (calculatedPositionSize < minSize) {
-      console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is below minimum (${minSize}) for ${tradingPair}`)
-      console.log(`[TradingView Webhook] Using minimum position size: ${minSize} units`)
-      calculatedPositionSize = minSize
-    }
+      const minSize = minPositionSizes[tradingPair] || 0.01
+      if (calculatedPositionSize < minSize) {
+        console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is below minimum (${minSize}) for ${tradingPair}`)
+        console.log(`[TradingView Webhook] Using minimum position size: ${minSize} units`)
+        calculatedPositionSize = minSize
+      }
     
-    const maxSize = maxPositionSizes[tradingPair]
-    if (calculatedPositionSize > maxSize) {
-      console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is above maximum (${maxSize}) for ${tradingPair}`)
-      console.log(`[TradingView Webhook] Using maximum position size: ${maxSize} units`)
-      calculatedPositionSize = maxSize
-    }
+      const maxSize = maxPositionSizes[tradingPair]
+      if (calculatedPositionSize > maxSize) {
+        console.log(`[TradingView Webhook] Warning: Calculated position size (${calculatedPositionSize}) is above maximum (${maxSize}) for ${tradingPair}`)
+        console.log(`[TradingView Webhook] Using maximum position size: ${maxSize} units`)
+        calculatedPositionSize = maxSize
+      }
 
     // Calculate the fixed stop price for risk sizing
-    const currentPrice = await getCurrentPrice(tradingPair)
-    const fixedStopDistance = getFixedStopDistance(tradingPair)
-    const fixedStopPrice = roundPrice(direction === 'buy'
-      ? currentPrice * (1 - fixedStopDistance / 100) // For buy orders, stop below current price
-      : currentPrice * (1 + fixedStopDistance / 100) // For sell orders, stop above current price
-    , getPricePrecision(tradingPair))
+      const currentPrice = await getCurrentPrice(tradingPair)
+      const fixedStopDistance = getFixedStopDistance(tradingPair)
+      const fixedStopPrice = roundPrice(direction === 'buy'
+        ? currentPrice * (1 - fixedStopDistance / 100)
+        : currentPrice * (1 + fixedStopDistance / 100)
+      , getPricePrecision(tradingPair))
 
-    console.log(`[TradingView Webhook] Current price: ${currentPrice}, Fixed stop price: ${fixedStopPrice}`)
+      console.log(`[TradingView Webhook] Current price: ${currentPrice}, Fixed stop price: ${fixedStopPrice}`)
 
     // First, place the fixed stop for risk protection
-    console.log(`[TradingView Webhook] Placing fixed stop for risk protection at ${fixedStopDistance}%`)
-    let fixedStopResult = null
-    let marketOrderResult = null
+      console.log(`[TradingView Webhook] Placing fixed stop for risk protection at ${fixedStopDistance}%`)
+      let fixedStopResult = null
+      let marketOrderResult = null
     
     try {
-      fixedStopResult = await placeStandaloneOrder(
-        'stp',
-        direction === 'buy' ? 'sell' : 'buy', // Opposite side for stop loss
-        calculatedPositionSize,
-        tradingPair,
-        { stopPrice: fixedStopPrice },
-        true // reduceOnly
-      )
+        fixedStopResult = await placeStandaloneOrder(
+          'stp',
+          direction === 'buy' ? 'sell' : 'buy',
+          calculatedPositionSize,
+          tradingPair,
+          { stopPrice: fixedStopPrice },
+          true
+        )
 
       if (fixedStopResult?.result === 'success') {
         console.log(`[TradingView Webhook] Fixed stop placed successfully at ${fixedStopPrice}`)
@@ -264,46 +306,50 @@ export async function executeTradingViewTrade(
     console.log('[TradingView Webhook] Fixed stop successful, placing market order')
     
     try {
-      marketOrderResult = await placeOrderWithExits(
-        direction, 
-        calculatedPositionSize, 
-        { type: 'none', distance: 0 }, // No stop (already placed above)
-        { type: 'none', price: 0 }, // No take profit
-        tradingPair, 
-        false, 
-        'tradingview_webhook', 
-        'fixed', 
-        precision
-      )
+        marketOrderResult = await placeOrderWithExits(
+          direction, 
+          calculatedPositionSize, 
+          { type: 'none', distance: 0 },
+          { type: 'none', price: 0 },
+          tradingPair, 
+          false, 
+          'tradingview_webhook', 
+          'fixed', 
+          precision
+        )
     } catch (marketOrderError) {
       console.error('[TradingView Webhook] Error placing market order:', marketOrderError)
       throw new Error('Failed to place market order')
     }
 
     // Send alert about the trade
-    const orderStatus = marketOrderResult?.marketOrder?.result || 'failed'
-    const stopStatus = fixedStopResult?.sendStatus?.status || 'failed'
-    
-    const alertMessage = positionChange === 'reverse_position' 
-      ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
-      : `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+      const orderStatus = marketOrderResult?.marketOrder?.result || 'failed'
+      const stopStatus = fixedStopResult?.sendStatus?.status || 'failed'
+      
+      const alertMessage = positionChange === 'reverse_position' 
+        ? `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition} (REVERSED)\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
+        : `TradingView ${direction.toUpperCase()} signal for ${ticker}\nPosition Change: ${trimmedPrevPosition} -> ${trimmedCurrentPosition}\nOrder Status: ${orderStatus}\nFixed Stop (${fixedStopDistance}%): ${stopStatus}\nPosition Size: ${calculatedPositionSize} units`
 
     console.log('alertMessage', alertMessage)
     
     //sendAlert(alertMessage)
 
-    console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
-    return {
-      success: orderStatus === 'success',
-      direction,
-      ticker,
-      tradingPair,
-      positionSize: calculatedPositionSize,
-      positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
-      changeType: positionChange,
-      marketOrderResult,
-      fixedStopResult,
-      positionClosed: positionChange === 'reverse_position' ? trimmedPrevPosition : null
+      console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
+      return {
+        success: orderStatus === 'success',
+        direction,
+        ticker,
+        tradingPair,
+        positionSize: calculatedPositionSize,
+        positionChange: `${trimmedPrevPosition} -> ${trimmedCurrentPosition}`,
+        changeType: positionChange,
+        marketOrderResult,
+        fixedStopResult,
+        positionClosed: positionChange === 'reverse_position' ? trimmedPrevPosition : null
+      }
+    } finally {
+      // Always release the per-symbol lock
+      releaseLock()
     }
 
   } catch (error) {
