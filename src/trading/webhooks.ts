@@ -49,8 +49,8 @@ async function verifyOrderPlaced(orderId: string, isStopOrder: boolean = true): 
 function getPositionSize(symbol: string): number {
   const positionSizes: { [key: string]: number } = {
     'PF_SUIUSD': 2.0,    // SUI - 
-    'PF_SOLUSD': 3.0,    // SOL - 
-    'PF_WIFUSD': 3.0,    // WIF - 
+    'PF_SOLUSD': 2.0,    // SOL - 
+    'PF_WIFUSD': 3.5,    // WIF - 
     'PF_XRPUSD': 2.0,    // XRP - 
     'PF_ETHUSD': 2.0,    // ETH - 
   }
