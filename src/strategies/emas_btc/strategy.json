@@ -1,6 +1,6 @@
 {
     "name": "emas_btc",
-    "enabled": true,
+    "enabled": false,
     "enabled_dev": false,
     "description": "EMA crossover strategy for BTC",
     "cronSchedule": "2 * * * *",
