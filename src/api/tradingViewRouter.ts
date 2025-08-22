@@ -157,8 +157,16 @@ router.post('/alert-hook', (req, res) => {
     return
   }
 
-  // Store the alert, then process the trade
+  // Store the alert, then process the trade (skip if exchange disabled)
   storeAlert(alert).then(async () => {
+    if (process.env.DISABLE_EXCHANGE === '1') {
+      res.status(200).json({
+        success: true,
+        message: 'Alert received (trading disabled)',
+        skipped: true
+      })
+      return
+    }
     // Process the alert based on the action and position changes
     const action = alert.strategy.order.action.toLowerCase()
     const ticker = alert.ticker
