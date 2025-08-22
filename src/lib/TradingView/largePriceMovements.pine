@@ -1,34 +1,52 @@
 //@version=6
-indicator("Large Price Movements", overlay=true)
+indicator('Large Price Movements (range+vol)', overlay=true)
 
-// === INPUTS ===
-n_percent = input.float(6, title="Threshold % Move", step=0.1)  // % Threshold
-lookback = input.int(12, title="Lookback Bars", minval=1)       // Lookback period
-use_range = input.bool(true, title="Use High-Low Range?")       // Toggle between Entry/Exit vs. Range
+PRICE_MOVEMENT_WEBHOOK_SECRET = "Put secret here"
 
-// === CALCULATIONS ===
-percent_move_entry_exit = 100 * (close - close[lookback]) / close[lookback]  // Close-to-Close Change
-percent_move_range = 100 * (high - low) / low  // High-Low Range Change
+// Price inputs
+n_percent = input.float(6, 'Threshold % Move', step=0.1)
+lookback  = input.int(12, 'Lookback Bars', minval=1)
+use_range = input.bool(true, 'Use Lookback Range (else Close-to-Close)')
 
+// Volume filter inputs
+use_volume_filter = input.bool(true, 'Require Volume Spike')
+vol_ma_len = input.int(20, 'Volume MA Length', minval=1)
+vol_mult = input.float(1.8, 'Per-Bar Vol Mult', step=0.1)
+use_agg_volume = input.bool(true, 'Also Use Aggregated Volume')
+vol_sum_mult = input.float(1.3, 'Agg Vol Mult', step=0.1)
+
+// Price moves
+percent_move_entry_exit = 100 * (close - close[lookback]) / close[lookback]
+hh = ta.highest(high, lookback)
+ll = ta.lowest(low, lookback)
+percent_move_range = 100 * (hh - ll) / ll
 percent_move = use_range ? percent_move_range : percent_move_entry_exit
+cond_price = use_range ? percent_move_range >= n_percent : math.abs(percent_move_entry_exit) >= n_percent
 
-// === DETECT HIGH RANGE MOVES EVEN IF OPEN = CLOSE ===
-condition_entry_exit = math.abs(percent_move_entry_exit) >= n_percent  // Using your `math.abs`
-condition_range = percent_move_range >= n_percent
+// Volume conditions (no ta.sum)
+vol_ma = ta.sma(volume, vol_ma_len)
+vol_sum = ta.cum(volume) - ta.cum(volume)[lookback]          // rolling lookback sum
+vol_sum_ma = ta.sma(vol_sum, vol_ma_len)
+cond_vol_bar = volume >= vol_mult * vol_ma
+cond_vol_agg = use_agg_volume and (vol_sum >= vol_sum_mult * vol_sum_ma)
+cond_vol = not use_volume_filter or (cond_vol_bar or cond_vol_agg)
 
-condition = use_range ? condition_range : condition_entry_exit
+// Final condition
+condition = cond_price and cond_vol
 
-// === PLOT EVENTS ===
-bgcolor(condition ? color.blue : na)  // Highlight detected bars
-label_condition = condition and not condition[1]  // Avoid duplicates
-label_pos = close > close[lookback] ? high : low  // Label position
-
-// Smaller, cleaner labels
+// Visuals
+bgcolor(condition ? color.new(color.blue, 85) : na)
+label_condition = condition and not condition[1]
+label_pos = na(close[lookback]) ? high : (close > close[lookback] ? high : low)
 if label_condition
-    label.new(x=bar_index, y=label_pos, text=str.tostring(time / 1000), 
-              color=color.white, textcolor=color.black, size=size.small, xloc=xloc.bar_index)
+    label.new(bar_index, label_pos, str.tostring(time / 1000), color=color.white, textcolor=color.black, size=size.small, xloc=xloc.bar_index)
 
-// === LOG FORMATTED TIMESTAMP TO CONSOLE ===
-if condition
-    formatted_date = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", time)  // Human-readable date
-    log.info("got one: " + formatted_date + " (Unix: " + str.tostring(time / 1000) + ")")
+
+// safe direction
+is_up = na(close[lookback]) ? (close > open) : (close > close[lookback]) 
+method = use_range ? 'range' : 'close'
+
+// build JSON without str.format
+payload = '{"symbol":"ETHUSD","secret":"' + PRICE_MOVEMENT_WEBHOOK_SECRET + '","method":"' + method + '","threshold":' + str.tostring(n_percent) + ',"direction":"' + (is_up ? 'up' : 'down') + '","timestamp":' + str.tostring(time / 1000) + '}'
+
+alert(payload, alert.freq_once_per_bar_close)

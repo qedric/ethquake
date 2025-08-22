@@ -11,6 +11,7 @@ import express from 'express'
 import cron from 'node-cron'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import priceMovementsRouter from '../api/priceMovementsRouter.js'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -193,6 +194,7 @@ async function startServer() {
     app.use('/charts', authMiddleware, visualizationRouter)
     app.use('/strategies', authMiddleware, strategiesRouter)
     app.use('/ledger', authMiddleware, ledgerDashboardRouter)
+    app.use('/api/price-movements', priceMovementsRouter)
     
     // Start Express server
     app.listen(PORT, () => {

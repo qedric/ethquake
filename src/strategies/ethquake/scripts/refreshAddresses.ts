@@ -29,10 +29,11 @@ const toWei = (eth: number) => (BigInt(Math.floor(eth)) * WEI).toString()
 async function fetchPaged(opts: Record<string, string | number>) {
   let page = 0
   let total: Tx[] = []
-  while (true) {
+  let hasMore = true
+  while (hasMore) {
     const txs = await fetchTransactions({ ...opts, page })
     total = total.concat(txs as Tx[])
-    if (txs.length < LIMIT) break
+    hasMore = txs.length === LIMIT
     page++
     if (page > 500) break
   }
@@ -205,7 +206,7 @@ async function main() {
     const toTimestamp = process.env.REFRESH_TO_TS ? parseInt(process.env.REFRESH_TO_TS) : undefined
     const cohort = process.env.REFRESH_COHORT
 
-    await buildCohort({ lookbackHours, weeklyControls, randomControls: randCtrls, minEth, fromTimestamp, toTimestamp, cohort })
+    await buildCohort({ lookbackHours, weeklyControls, randomControls: randomCtrls, minEth, fromTimestamp, toTimestamp, cohort })
   } else if (cmd === 'promote') {
     const cohort = process.env.REFRESH_COHORT || new Date().toISOString().slice(0, 10)
     const minScore = parseInt(process.env.REFRESH_MIN_SCORE || '2')
