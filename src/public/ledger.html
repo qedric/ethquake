@@ -343,6 +343,20 @@
       font-weight: 500;
     }
     
+    .ledger-table .direction {
+      text-transform: capitalize;
+      font-weight: 600;
+      text-align: center;
+    }
+    
+    .ledger-table .direction:contains('Long') {
+      color: #28a745;
+    }
+    
+    .ledger-table .direction:contains('Short') {
+      color: #dc3545;
+    }
+    
     .ledger-table .date {
       color: #b0b0b0;
       font-size: 0.9em;
@@ -588,6 +602,7 @@
             <th>Date</th>
             <th>Type</th>
             <th>Symbol</th>
+            <th>Direction</th>
             <th class="right-align">Amount</th>
             <th class="right-align">PnL</th>
             <th class="right-align">Fee</th>
@@ -776,23 +791,13 @@
       const groupedEntries = groupEntries(entries)
       
       groupedEntries.forEach((group, groupIndex) => {
-        if (group.isGrouped) {
-          // Create grouped row
-          const groupRow = document.createElement('tr')
-          groupRow.className = 'group-row'
-          groupRow.dataset.groupIndex = groupIndex
+        // Always render as a grouped row (even if single entry)
+        const groupRow = document.createElement('tr')
+        groupRow.className = 'group-row'
+        groupRow.dataset.groupIndex = groupIndex
           
-          const date = new Date(group.entries[0].time * 1000).toLocaleString(navigator.language, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            timeZoneName: 'short'
-          })
+          const date = group.dateTime
           
-          const totalAmount = group.entries.reduce((sum, entry) => sum + parseFloat(entry.amount), 0)
           const totalPnL = group.entries.reduce((sum, entry) => {
             const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : 0
             return sum + pnl
@@ -801,19 +806,23 @@
             const fee = entry.fee ? parseFloat(entry.fee) : 0
             return sum + fee
           }, 0)
-          const lastBalance = parseFloat(group.entries[0].balance)
+          
+          // Get grouped display info
+          const groupedInfo = getGroupedDisplayInfo(group)
+          const direction = groupedInfo.direction || getPositionDirection(groupedInfo.amount, groupedInfo.balance)
           
           groupRow.innerHTML = `
             <td>
               <span class="expand-toggle" onclick="toggleGroup(${groupIndex})">+</span>
             </td>
             <td class="date">${date}</td>
-            <td class="type">${group.entries[0].type}</td>
+            <td class="type">${groupedInfo.type}</td>
             <td>${group.entries[0].symbol || '-'}</td>
-            <td class="amount ${totalAmount >= 0 ? 'positive' : 'negative'}">${totalAmount}</td>
+            <td class="direction">${direction}</td>
+            <td class="amount ${groupedInfo.amount >= 0 ? 'positive' : 'negative'}">${groupedInfo.amount}</td>
             <td class="amount ${totalPnL >= 0 ? 'positive' : 'negative'}">${formatCurrency(totalPnL)}</td>
             <td class="amount negative">${formatCurrency(totalFee)}</td>
-            <td class="amount">${lastBalance}</td>
+            <td class="amount">${groupedInfo.balance}</td>
           `
           
           tbody.appendChild(groupRow)
@@ -832,6 +841,7 @@
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
+              hour12: false,
               timeZoneName: 'short'
             })
             const amount = parseFloat(entry.amount)
@@ -841,11 +851,15 @@
             const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : null
             const fee = entry.fee ? parseFloat(entry.fee) : null
             
+            // Determine direction for detail row (keep original type)
+            const direction = getPositionDirection(amount, balance)
+            
             detailRow.innerHTML = `
               <td></td>
               <td class="date detail-indent">${entryDate}</td>
               <td class="type">${entry.type}</td>
               <td>${entry.symbol || '-'}</td>
+              <td class="direction">${direction}</td>
               <td class="amount ${amount >= 0 ? 'positive' : 'negative'}">${amount}</td>
               <td class="amount ${pnl !== null ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${pnl !== null ? formatCurrency(pnl) : '-'}</td>
               <td class="amount ${fee !== null ? 'negative' : ''}">${fee !== null ? formatCurrency(fee) : '-'}</td>
@@ -854,58 +868,34 @@
             
             tbody.appendChild(detailRow)
           })
-        } else {
-          // Single entry (not grouped)
-          const entry = group.entries[0]
-          const row = document.createElement('tr')
-          
-          const date = new Date(entry.time * 1000).toLocaleString(navigator.language, {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            timeZoneName: 'short'
-          })
-          const amount = parseFloat(entry.amount)
-          const balance = parseFloat(entry.balance)
-          
-          // Calculate PnL and fee for display
-          const pnl = entry.realizedPnL ? parseFloat(entry.realizedPnL) : null
-          const fee = entry.fee ? parseFloat(entry.fee) : null
-          
-          row.innerHTML = `
-            <td></td>
-            <td class="date">${date}</td>
-            <td class="type">${entry.type}</td>
-            <td>${entry.symbol || '-'}</td>
-            <td class="amount ${amount >= 0 ? 'positive' : 'negative'}">${amount}</td>
-            <td class="amount ${pnl !== null ? (pnl >= 0 ? 'positive' : 'negative') : ''}">${pnl !== null ? formatCurrency(pnl) : '-'}</td>
-            <td class="amount ${fee !== null ? 'negative' : ''}">${fee !== null ? formatCurrency(fee) : '-'}</td>
-            <td class="amount">${balance}</td>
-          `
-          
-          tbody.appendChild(row)
-        }
       })
     }
     
-    // Group entries by Date, Type, and Symbol
+    // Group entries by exact Date/Time and Symbol, but only if they're part of the same position action
     function groupEntries(entries) {
       const groups = []
       let currentGroup = null
       
       entries.forEach(entry => {
-        const date = new Date(entry.time * 1000).toLocaleDateString()
-        const type = entry.type
+        const dateTime = new Date(entry.time * 1000).toLocaleString(navigator.language, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+          timeZoneName: 'short'
+        })
         const symbol = entry.symbol || '-'
+        const amount = parseFloat(entry.amount)
+        const balance = parseFloat(entry.balance)
         
         // Check if this entry should be grouped with the previous one
         if (currentGroup && 
-            currentGroup.date === date && 
-            currentGroup.type === type && 
-            currentGroup.symbol === symbol) {
+            currentGroup.dateTime === dateTime && 
+            currentGroup.symbol === symbol &&
+            shouldGroupWithPrevious(currentGroup, entry)) {
           // Add to current group
           currentGroup.entries.push(entry)
         } else {
@@ -914,8 +904,7 @@
             groups.push(currentGroup)
           }
           currentGroup = {
-            date: date,
-            type: type,
+            dateTime: dateTime,
             symbol: symbol,
             entries: [entry],
             isGrouped: false
@@ -936,6 +925,159 @@
       })
       
       return groups
+    }
+    
+    // Helper function to determine if an entry should be grouped with the previous group
+    function shouldGroupWithPrevious(currentGroup, newEntry) {
+      const entries = currentGroup.entries
+      const lastEntry = entries[entries.length - 1]
+      
+      const lastBalance = parseFloat(lastEntry.balance)
+      const newBalance = parseFloat(newEntry.balance)
+      const newAmount = parseFloat(newEntry.amount)
+      const lastType = String(lastEntry.type || '').toLowerCase()
+      const newType = String(newEntry.type || '').toLowerCase()
+      
+      // Avoid grouping separate positions or flip at the same timestamp:
+      // - if the group has a non-zero sign and new entry has opposite non-zero sign
+      // - if the group contains a close to zero and the new entry opens a position (non-zero with opposite sign)
+      const existingNonZeroSign = (() => {
+        for (let i = 0; i < entries.length; i++) {
+          const bal = parseFloat(entries[i].balance)
+          if (bal !== 0) return Math.sign(bal)
+        }
+        return 0
+      })()
+      const groupClosesToZero = entries.some(e => parseFloat(e.balance) === 0)
+      const newSign = Math.sign(newBalance)
+      if (existingNonZeroSign !== 0 && newBalance !== 0 && newSign !== existingNonZeroSign) {
+        // Opposite side while position still open -> flip, do not group
+        return false
+      }
+      if (groupClosesToZero && newBalance !== 0) {
+        // Group currently contains a close-to-zero at this timestamp.
+        // Allow grouping entries that belong to the same closing side; block opposite-side opens.
+        if (existingNonZeroSign !== 0) {
+          return newSign === existingNonZeroSign
+        } else {
+          // No established side yet (e.g., first entry had balance 0). Avoid explicit opens; otherwise allow as part of close.
+          if (newType.includes('position_opened')) return false
+          return true
+        }
+      }
+
+      // If current group has an established side, do not mix in a close belonging to the opposite side
+      if (existingNonZeroSign !== 0 && newType.includes('position_closed')) {
+        const amtSign = Math.sign(newAmount)
+        if (amtSign !== 0 && amtSign !== existingNonZeroSign) {
+          return false
+        }
+      }
+
+      // Otherwise, keep together: decreases/increases and the final close at the same timestamp
+      return true
+    }
+    
+    // Helper function to determine position direction
+    function getPositionDirection(amount, balance) {
+      if (balance === 0) {
+        // Position closed - determine direction from amount
+        // If amount is positive, we're closing a long position (selling to close)
+        // If amount is negative, we're closing a short position (buying to close)
+        return amount > 0 ? 'Long' : 'Short'
+      } else if (balance > 0) {
+        return 'Long'
+      } else {
+        return 'Short'
+      }
+    }
+    
+    // Helper function to determine display type
+    function getDisplayType(amount, balance, originalType) {
+      if (balance === 0) {
+        return 'Position Closed'
+      } else if (Math.abs(amount) === Math.abs(balance) && amount !== 0) {
+        return 'Position Opened'
+      } else {
+        return originalType
+      }
+    }
+    
+    // Helper function to determine grouped row display type and amount
+    function getGroupedDisplayInfo(group) {
+      const entries = group.entries
+      const mostRecentBalance = parseFloat(entries[0].balance)
+      const earliestBalance = parseFloat(entries[entries.length - 1].balance)
+      
+      // Guard: position flip within a single group (should be rare due to grouping rules)
+      if ((earliestBalance > 0 && mostRecentBalance < 0) || (earliestBalance < 0 && mostRecentBalance > 0)) {
+        const direction = mostRecentBalance > 0 ? 'Long' : 'Short'
+        return {
+          type: `Flipped ${direction}`,
+          amount: mostRecentBalance,
+          balance: mostRecentBalance,
+          direction
+        }
+      }
+      
+      // Position Closed: recent balance is zero OR there exists an explicit close at this timestamp
+      const hasExplicitClose = entries.some(e => String(e.type || '').toLowerCase().includes('position_closed'))
+      if (mostRecentBalance === 0 || hasExplicitClose) {
+        // Determine the side being closed from the earliest non-zero balance in the group
+        let preCloseBalance = 0
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const bal = parseFloat(entries[i].balance)
+          if (bal !== 0) { preCloseBalance = bal; break }
+        }
+        const sideSign = Math.sign(preCloseBalance)
+        const sumAbs = entries.reduce((sum, e) => sum + Math.abs(parseFloat(e.amount)), 0)
+        const closedAmount = sideSign > 0 ? -sumAbs : sideSign < 0 ? sumAbs : 0
+        const direction = sideSign >= 0 ? 'Long' : 'Short'
+        return {
+          type: 'Position Closed',
+          amount: closedAmount,
+          balance: 0,
+          direction
+        }
+      }
+      
+      // Position Opened: any entry that marks an open (abs(amount) === abs(balance)) or explicit type
+      const hasOpenMarker = entries.some(e => {
+        const type = String(e.type || '').toLowerCase()
+        const amt = parseFloat(e.amount)
+        const bal = parseFloat(e.balance)
+        return type === 'position_opened' || (Math.abs(amt) === Math.abs(bal) && bal !== 0)
+      })
+      if (hasOpenMarker) {
+        const direction = mostRecentBalance > 0 ? 'Long' : 'Short'
+        return {
+          type: 'Position Opened',
+          amount: mostRecentBalance, // Use final balance as amount
+          balance: mostRecentBalance,
+          direction
+        }
+      }
+      
+      // Default: increases/decreases only (humanize type label)
+      const totalAmount = entries.reduce((sum, entry) => sum + parseFloat(entry.amount), 0)
+      const anyIncrease = entries.some(e => String(e.type || '').toLowerCase().includes('position_increased'))
+      const anyDecrease = entries.some(e => String(e.type || '').toLowerCase().includes('position_decreased'))
+      // Determine whether net size grew or shrank relative to earliest balance
+      const netGrew = Math.sign(mostRecentBalance) === Math.sign(earliestBalance) && Math.abs(mostRecentBalance) > Math.abs(earliestBalance)
+      const netShrank = Math.sign(mostRecentBalance) === Math.sign(earliestBalance) && Math.abs(mostRecentBalance) < Math.abs(earliestBalance)
+      let typeLabel = entries[0].type
+      if (anyIncrease || anyDecrease) {
+        if (netGrew) typeLabel = 'Position Increased'
+        else if (netShrank) typeLabel = 'Position Reduced'
+        else typeLabel = anyIncrease && !anyDecrease ? 'Position Increased' : (!anyIncrease && anyDecrease ? 'Position Reduced' : 'Position Changed')
+      }
+      const direction = mostRecentBalance > 0 ? 'Long' : mostRecentBalance < 0 ? 'Short' : (totalAmount >= 0 ? 'Long' : 'Short')
+      return {
+        type: typeLabel,
+        amount: totalAmount,
+        balance: mostRecentBalance,
+        direction
+      }
     }
     
     // Toggle group expansion
