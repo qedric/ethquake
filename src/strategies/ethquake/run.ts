@@ -48,8 +48,12 @@ export async function runPipelineTask() {
     // Get a database connection
     const db = await getDb(selectedDbName as string)
 
-    // Check and update position status first
-    await syncPositionWithExchange('ethquake', 'PF_ETHUSD')
+    // Check and update position status first (skip if disabled for staging)
+    if (process.env.DISABLE_EXCHANGE !== '1') {
+      await syncPositionWithExchange('ethquake', 'PF_ETHUSD')
+    } else {
+      console.log('[Strategy: ethquake] Skipping exchange sync (DISABLE_EXCHANGE=1)')
+    }
 
     // Update transactions data
     const txResult = await updateTransactionsByAddressesOfInterest({
@@ -59,8 +63,8 @@ export async function runPipelineTask() {
     // Run analysis
     const analysisResults = await countTransactionsByHour(db)
 
-    // Only execute trading strategy in production
-    if (process.env.NODE_ENV === 'production') {
+    // Only execute trading strategy in production and when exchange is enabled
+    if (process.env.NODE_ENV === 'production' && process.env.DISABLE_EXCHANGE !== '1') {
       await executeTradeStrategy()
     }
 

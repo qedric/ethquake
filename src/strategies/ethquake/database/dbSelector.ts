@@ -3,6 +3,13 @@
  * @returns {Promise<string>} The selected database name
  */
 async function selectDatabase(): Promise<string> {
+  // Env override always wins (useful for staging/prod split)
+  if (process.env.MONGO_DB_NAME && process.env.MONGO_DB_NAME.trim().length > 0) {
+    const envDb = process.env.MONGO_DB_NAME.trim()
+    console.log(`[Strategy: ethquake] Using database from MONGO_DB_NAME: ${envDb}`)
+    return envDb
+  }
+
   if (process.env.NODE_ENV === 'production') {
     console.log('[Strategy: ethquake] Production mode - using ethquake database')
     return 'ethquake' // Always use A in production

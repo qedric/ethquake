@@ -11,6 +11,7 @@ import express from 'express'
 import cron from 'node-cron'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import priceMovementsRouter from '../api/priceMovementsRouter.js'
 
 // Load those pesky environment variables that you can't seem to organize properly
 dotenv.config()
@@ -59,6 +60,13 @@ const strategies: Record<string, LoadedStrategy> = {}
 
 async function loadStrategies() {
   console.log('Loading strategies from:', STRATEGIES_DIR)
+  const whitelistEnv = process.env.STRATEGIES_ONLY || ''
+  const whitelist = new Set(
+    whitelistEnv
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+  )
   const strategyFolders = fs.readdirSync(STRATEGIES_DIR, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => dirent.name)
@@ -82,6 +90,12 @@ async function loadStrategies() {
     }
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as StrategyConfig
+
+    // Apply optional whitelist by strategy name
+    if (whitelist.size > 0 && !whitelist.has(config.name)) {
+      console.log(`Strategy ${config.name} skipped (not in STRATEGIES_ONLY whitelist)`) 
+      continue
+    }
     
     // Store strategy regardless of enabled status
     strategies[config.name] = {
@@ -193,6 +207,7 @@ async function startServer() {
     app.use('/charts', authMiddleware, visualizationRouter)
     app.use('/strategies', authMiddleware, strategiesRouter)
     app.use('/ledger', authMiddleware, ledgerDashboardRouter)
+    app.use('/api/price-movements', priceMovementsRouter)
     
     // Start Express server
     app.listen(PORT, () => {
