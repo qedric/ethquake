@@ -53,6 +53,7 @@ function getPositionSize(symbol: string): number {
     'PF_WIFUSD': 3.5,    // WIF - 
     'PF_XRPUSD': 2.0,    // XRP - 
     'PF_ETHUSD': 2.5,    // ETH - 
+    'PF_XBTUSD': 2.0,
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -67,9 +68,9 @@ function getFixedStopDistance(symbol: string): number {
     'PF_SUIUSD': 4.6,
     'PF_SOLUSD': 5.1,
     'PF_ETHUSD': 2.1,
-    'PF_XBTUSD': 5,
+    'PF_XBTUSD': 3.0,
     'PF_WIFUSD': 4.1,
-    'PF_XRPUSD': 6.1,
+    'PF_XRPUSD': 2.0,
   }
   
   return stopDistances[symbol] || 7 // Default to 7% if symbol not found
