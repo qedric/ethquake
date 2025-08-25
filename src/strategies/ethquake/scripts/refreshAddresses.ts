@@ -71,7 +71,7 @@ function collectAddresses(txs: Tx[]) {
   return s
 }
 
-async function buildCohort({
+export async function buildCohort({
   lookbackHours,
   weeklyControls,
   randomControls: randCtrls,
@@ -160,7 +160,7 @@ async function buildCohort({
   console.log(`[Strategy: ethquake] Built cohort '${cohortName}' with ${candidates.length} candidates from ${movements.length} movements`)
 }
 
-async function promoteCohort({ cohort, minScore, yes }: { cohort: string, minScore: number, yes: boolean }) {
+export async function promoteCohort({ cohort, minScore, yes }: { cohort: string, minScore: number, yes: boolean }) {
   const db = await getDb(process.env.MONGO_DB_NAME || 'ethquake')
   const list = await db.collection('addresses_of_interest_candidates')
     .find({ cohort, score: { $gte: minScore } })
