@@ -67,7 +67,7 @@ function getFixedStopDistance(symbol: string): number {
   const stopDistances: { [key: string]: number } = {
     'PF_SUIUSD': 4.6,
     'PF_SOLUSD': 5.1,
-    'PF_ETHUSD': 2.1,
+    'PF_ETHUSD': 4.1,
     'PF_XBTUSD': 3.0,
     'PF_WIFUSD': 4.1,
     'PF_XRPUSD': 2.0,
