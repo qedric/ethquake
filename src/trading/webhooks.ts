@@ -256,7 +256,7 @@ export async function executeTradingViewTrade(
       'PF_SUIUSD': 1,    // SUI minimum 1 unit
       'PF_SOLUSD': 0.01, // SOL minimum 0.01 units
       'PF_ETHUSD': 0.001, // ETH minimum 0.001 units
-      'PF_BTCUSD': 0.0001, // BTC minimum 0.0001 units
+      'PF_XBTUSD': 0.0001, // XBT minimum 0.0001 units
       'PF_WIFUSD': 1, // WIF minimum 0.0001 units
     }
 
@@ -265,7 +265,7 @@ export async function executeTradingViewTrade(
       'PF_SUIUSD': 2000,    // SUI minimum 1 unit
       'PF_SOLUSD': 30, // SOL minimum 0.01 units
       'PF_ETHUSD': 3, // ETH minimum 0.001 units
-      'PF_BTCUSD': 0.06, // BTC minimum 0.0001 units
+      'PF_XBTUSD': 0.06, // XBT minimum 0.0001 units
       'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
     }
     
