@@ -43,6 +43,7 @@ const DEFAULT_MIN_ETH = 100
 const WEI_TO_ETH = 1e18
 const API_LIMIT = 200
 const DEFAULT_OVERLAP_SECONDS = parseInt(process.env.INGEST_OVERLAP_S || '600')
+const DEFAULT_INITIAL_LOOKBACK_SECONDS = parseInt(process.env.INGEST_INITIAL_LOOKBACK_S || '259200') // 3 days
 
 type AddressDoc = {
   address: string
@@ -120,9 +121,13 @@ async function updateTransactionsByAddressesOfInterest({
       }
     }
 
-    // Load addresses of interest
+    // Load addresses of interest (also seed watermark from last_seen_ts if present)
     const addressDocs = await db.collection('addresses_of_interest').find({}).toArray() as AddressDoc[]
     const addressesOfInterest = addressDocs.map(d => d.address).filter(Boolean)
+    const addrDocLastSeen = new Map<string, number>()
+    for (const d of addressDocs) {
+      if (d.address) addrDocLastSeen.set(d.address.toLowerCase(), typeof d.last_seen_ts === 'number' ? d.last_seen_ts : 0)
+    }
     console.log(`[Strategy: ethquake] Loaded ${addressesOfInterest.length} addresses of interest.`)
 
     if (addressesOfInterest.length === 0) throw new Error('No addresses of interest found in MongoDB. Nothing to update.')
@@ -144,6 +149,10 @@ async function updateTransactionsByAddressesOfInterest({
     const overlap = DEFAULT_OVERLAP_SECONDS
     const nowSec = Math.floor(Date.now() / 1000)
     const globalEndTs = toTimestamp ?? nowSec
+    // If we have existing data, compute a global reference; otherwise default to now
+    const globalLatestSeenTs = (existingTransactions.length > 0)
+      ? Math.max(...(existingTransactions as Array<any>).map(t => typeof t.block_timestamp === 'number' ? t.block_timestamp : 0))
+      : nowSec
 
     // Helper to fetch all pages for an address and a direction
     const fetchPagedFor = async (params: Record<string, string | number>) => {
@@ -169,8 +178,11 @@ async function updateTransactionsByAddressesOfInterest({
 
       const chunkPromises = addressesChunk.map(async rawAddr => {
         const address = rawAddr.toLowerCase()
-        const addrLastSeen = addressLastSeenTs.get(address) || 0
-        const startTsBase = fromTimestamp ?? addrLastSeen
+        const addrSeenFromTxs = addressLastSeenTs.get(address) || 0
+        const addrSeenFromDoc = addrDocLastSeen.get(address) || 0
+        const bestKnownAddrTs = Math.max(addrSeenFromTxs, addrSeenFromDoc)
+        const defaultInitialFloor = Math.max(globalLatestSeenTs - DEFAULT_INITIAL_LOOKBACK_SECONDS, nowSec - DEFAULT_INITIAL_LOOKBACK_SECONDS, 0)
+        const startTsBase = fromTimestamp ?? (bestKnownAddrTs > 0 ? bestKnownAddrTs : defaultInitialFloor)
         const startTs = Math.max(0, startTsBase - overlap)
 
         const baseFilters = {
