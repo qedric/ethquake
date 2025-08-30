@@ -148,16 +148,18 @@ async function updateTransactionsByAddressesOfInterest({
     // Helper to fetch all pages for an address and a direction
     const fetchPagedFor = async (params: Record<string, string | number>) => {
       const total: TWTransaction[] = []
+      const pageDelayMs = parseInt(process.env.INGEST_PAGE_DELAY_MS || '200')
       for (let page = 0; page <= 500; page++) {
         const txs = await fetchTransactions({ ...params, page }) as TWTransaction[]
         total.push(...txs)
         if (!txs || txs.length < API_LIMIT) break
+        if (pageDelayMs > 0) await new Promise(r => setTimeout(r, pageDelayMs))
       }
       return total
     }
 
     // Process addresses in chunks
-    const chunkSize = 20
+    const chunkSize = parseInt(process.env.INGEST_CHUNK_SIZE || '10')
     let processedAddressesCount = 0
     process.stdout.write('\r\x1b[K')
     process.stdout.write(`[Strategy: ethquake] Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `)

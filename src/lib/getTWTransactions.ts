@@ -38,6 +38,9 @@ export async function fetchTransactions(options: Record<string, any> = {}) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const url = buildUrl()
+      if (process.env.TW_LOG_URLS === '1' || process.env.TW_LOG_URLS === 'true') {
+        console.log('[Thirdweb] GET', url)
+      }
       const response = await axios.get(url)
       return response.data.data || []
     } catch (error) {
@@ -54,7 +57,8 @@ export async function fetchTransactions(options: Record<string, any> = {}) {
         console.error('Response status:', status)
       }
       if (attempt < maxRetries - 1 && retriable) {
-        const delay = baseDelayMs * Math.pow(2, attempt) + Math.floor(Math.random() * 200)
+        const jitter = Math.floor(Math.random() * 200)
+        const delay = baseDelayMs * Math.pow(2, attempt) + jitter
         await new Promise(r => setTimeout(r, delay))
         continue
       }
