@@ -20,44 +20,46 @@ if (!TW_CLIENT_ID) {
  * @returns {Array} Array of transaction objects
  */
 export async function fetchTransactions(options: Record<string, any> = {}) {
-  try {
-    // Base URL with chain and client ID
+  const buildUrl = () => {
     let url = `https://insight.thirdweb.com/v1/transactions?chain=1&clientId=${TW_CLIENT_ID}`
-    
-    // Default parameters
     url += '&sort_by=block_number&sort_order=desc&limit=200'
-
-    // Add filter for minimum ETH value if not provided
     if (!options.filter_value_gte) {
       url += `&filter_value_gte=${DEFAULT_MIN_ETH_VALUE}`
     }
-    
-    // Add all filters from options
     for (const [key, value] of Object.entries(options)) {
-      // Skip null or undefined values
       if (value === null || value === undefined) continue
-      
-      // Add filter parameter to URL
       url += `&${key}=${value}`
     }
-    
-    // Log basic info about the request (keeping some logging for debugging)
-    /* console.log(`Fetching transactions with filters:`, 
-      Object.keys(options).length > 0 ? options : 'No filters') */
-    
-    const response = await axios.get(url)
-    return response.data.data || [] 
-  } catch (error) {
-    console.error('Error fetching transactions:', error instanceof Error ? error.message : String(error))
-    if (error instanceof Error && 'response' in error) {
-      const data = (error as any).response.data
-      if (typeof data === 'string' && data.trim().toLowerCase().startsWith('<!doctype html')) {
-        console.error('Response data: [HTML error page skipped]')
-      } else {
-        console.error('Response data:', data)
-      }
-      console.error('Response status:', (error as any).response.status)
-    }
-    return [] // Return empty array on error
+    return url
   }
+
+  const maxRetries = 5
+  const baseDelayMs = 300
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const url = buildUrl()
+      const response = await axios.get(url)
+      return response.data.data || []
+    } catch (error) {
+      const status = (error as any)?.response?.status
+      const retriable = !status || [429, 500, 502, 503, 504].includes(status)
+      console.error('Error fetching transactions:', error instanceof Error ? error.message : String(error))
+      if ((error as any)?.response?.data) {
+        const data = (error as any).response.data
+        if (typeof data === 'string' && data.trim().toLowerCase().startsWith('<!doctype html')) {
+          console.error('Response data: [HTML error page skipped]')
+        } else {
+          console.error('Response data:', data)
+        }
+        console.error('Response status:', status)
+      }
+      if (attempt < maxRetries - 1 && retriable) {
+        const delay = baseDelayMs * Math.pow(2, attempt) + Math.floor(Math.random() * 200)
+        await new Promise(r => setTimeout(r, delay))
+        continue
+      }
+      return []
+    }
+  }
+  return []
 }
