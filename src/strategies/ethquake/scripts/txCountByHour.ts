@@ -53,26 +53,36 @@ async function countTransactionsByHour(existingDb: any = null, existingClient: a
       return
     }
     
-    // Format the results for display (only for console output)
-    const output = results.map((r: any) => {
-      const date = new Date(r._id.hourDate)
-      // Format DD/MM/YY in UTC
+    // Build a map for quick lookup by hour timestamp (ms)
+    const countByHour = new Map<number, number>()
+    for (const r of results as Array<any>) {
+      const d = new Date(r._id.hourDate)
+      countByHour.set(d.getTime(), r.count)
+    }
+
+    // Compose a true rolling last 24 completed UTC hours, zero-filled
+    const now = new Date()
+    const currentHourUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours()))
+    const endHourUTC = new Date(currentHourUTC.getTime() - 60 * 60 * 1000)
+
+    const format = (date: Date, count: number) => {
       const day = date.getUTCDate().toString().padStart(2, '0')
       const month = (date.getUTCMonth() + 1).toString().padStart(2, '0')
       const year = date.getUTCFullYear().toString().substring(2)
-      // Format HH in UTC
       const hour = date.getUTCHours().toString().padStart(2, '0')
-      
-      return `${day}/${month}/${year} - ${hour},${r.count}`
-    })
-    
+      return `${day}/${month}/${year} - ${hour},${count}`
+    }
+
+    const windowLines: string[] = []
+    for (let i = 23; i >= 0; i--) {
+      const ts = new Date(endHourUTC.getTime() - i * 60 * 60 * 1000)
+      const count = countByHour.get(ts.getTime()) ?? 0
+      windowLines.push(format(ts, count))
+    }
+
     console.log('[Strategy: ethquake] Analysis complete.')
-    console.log('\n[Strategy: ethquake] Hourly transaction counts (last 24 hrs):')
-    
-    // Get the last 24 entries chronologically
-    const last24HrsOutput = output.slice(-24).join('\n')
-    
-    console.log(last24HrsOutput || '[Strategy: ethquake] No transactions in the last 24 hours')
+    console.log('\n[Strategy: ethquake] Hourly transaction counts (rolling last 24 completed UTC hours):')
+    console.log(windowLines.join('\n'))
     
     // Prepare data for storing in MongoDB with proper date handling
     const analysisResults = results.map((r: any) => {

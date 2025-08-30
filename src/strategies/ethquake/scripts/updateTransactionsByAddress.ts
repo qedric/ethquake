@@ -1,6 +1,5 @@
 import dotenv from 'dotenv'
 import { getDb } from '../../../lib/mongodb.js'
-import { getBlockNumberFromTimestamp } from '../../../lib/getBlockNumberFromTimestamp.js'
 import { fetchTransactions } from '../../../lib/getTWTransactions.js'
 import { MongoClient } from 'mongodb'
 import { selectDatabase } from '../database/dbSelector.js'
@@ -42,9 +41,25 @@ dotenv.config()
 
 const DEFAULT_MIN_ETH = 100
 const WEI_TO_ETH = 1e18
+const API_LIMIT = 200
+const DEFAULT_OVERLAP_SECONDS = parseInt(process.env.INGEST_OVERLAP_S || '600')
+
+type AddressDoc = {
+  address: string
+  last_seen_ts?: number
+}
+
+type TWTransaction = {
+  hash: string
+  block_number: number
+  block_timestamp: number
+  from_address: string
+  to_address: string
+  value: string | number
+}
 
 /**
- * Updates transactions for addresses of interest by fetching new ones since the specified block
+ * Updates transactions for addresses of interest using timestamp-based polling with overlap and pagination
  * 
  * @param {number} minEthValue - Minimum transaction value in ETH to include
  * @param {number} [fromTimestamp] - Optional start timestamp in seconds
@@ -83,171 +98,170 @@ async function updateTransactionsByAddressesOfInterest({
   try {
     console.log('[Strategy: ethquake] fromTimestamp:', fromTimestamp)
     console.log('[Strategy: ethquake] toTimestamp:', toTimestamp)
-    
-    // Load existing transaction data from MongoDB
+
+    // Load existing transactions once to build per-address watermarks without N queries
     console.log('[Strategy: ethquake] Reading existing transaction data from MongoDB...')
-    let existingTransactions: any[] = []
-    
-    try {
-      existingTransactions = await db.collection('transactions').find({}).toArray()
-      console.log(`[Strategy: ethquake] Found ${existingTransactions.length} existing transactions.`)
-    } catch (error) {
-      console.error('[Strategy: ethquake] Error fetching transactions from MongoDB:', error)
-      throw new Error(`Failed to read existing transactions: ${error instanceof Error ? error.message : String(error)}`)
+    const existingTransactions = await db.collection('transactions').find({}).toArray()
+    console.log(`[Strategy: ethquake] Found ${existingTransactions.length} existing transactions.`)
+
+    // Build per-address last seen timestamps from existing transactions
+    const addressLastSeenTs = new Map<string, number>()
+    for (const tx of existingTransactions as Array<any>) {
+      const ts = typeof tx.block_timestamp === 'number' ? tx.block_timestamp : 0
+      if (tx.from_address) {
+        const a = String(tx.from_address).toLowerCase()
+        const prev = addressLastSeenTs.get(a) || 0
+        if (ts > prev) addressLastSeenTs.set(a, ts)
+      }
+      if (tx.to_address) {
+        const a = String(tx.to_address).toLowerCase()
+        const prev = addressLastSeenTs.get(a) || 0
+        if (ts > prev) addressLastSeenTs.set(a, ts)
+      }
     }
 
-    // Determine block numbers from timestamps if provided
-    let startBlockNumber = null
-    let endBlockNumber = null
-    
-    if (fromTimestamp) {
-      startBlockNumber = await getBlockNumberFromTimestamp(fromTimestamp)
-      console.log(`[Strategy: ethquake] Using start block number ${startBlockNumber} (from timestamp ${fromTimestamp})`)
-    } else if (existingTransactions.length > 0) {
-      // Find the highest block_number from existing transactions
-      startBlockNumber = Math.max(...existingTransactions.map((tx: any) => parseInt((tx as any).block_number)))
-      console.log(`[Strategy: ethquake] Latest block number in existing data: ${startBlockNumber}`)
-    } else {
-      // If there are no transactions yet and no start timestamp was provided, we need to abort
-      console.log('[Strategy: ethquake] No existing transactions found in MongoDB and no start timestamp provided.')
-      throw new Error('Cannot determine start block. Please provide a start timestamp.')
-    }
+    // Load addresses of interest
+    const addressDocs = await db.collection('addresses_of_interest').find({}).toArray() as AddressDoc[]
+    const addressesOfInterest = addressDocs.map(d => d.address).filter(Boolean)
+    console.log(`[Strategy: ethquake] Loaded ${addressesOfInterest.length} addresses of interest.`)
 
-    if (toTimestamp) {
-      endBlockNumber = await getBlockNumberFromTimestamp(toTimestamp)
-      console.log(`[Strategy: ethquake] Using end block number ${endBlockNumber} (from timestamp ${toTimestamp})`)
-    }
+    if (addressesOfInterest.length === 0) throw new Error('No addresses of interest found in MongoDB. Nothing to update.')
 
-    // Load addresses of interest from MongoDB
-    let addressesOfInterest: any[] = []
-    
-    try {
-      addressesOfInterest = await db.collection('addresses_of_interest').find({}).toArray()
-      addressesOfInterest = addressesOfInterest.map(item => (item as any).address)
-      console.log(`[Strategy: ethquake] Loaded ${addressesOfInterest.length} addresses of interest.`)
-    } catch (error) {
-      console.error('[Strategy: ethquake] Error fetching addresses of interest from MongoDB:', error)
-      throw new Error(`Failed to load addresses of interest: ${error instanceof Error ? error.message : String(error)}`)
-    }
-
-    if (addressesOfInterest.length === 0) {
-      throw new Error('No addresses of interest found in MongoDB. Nothing to update.')
-    }
-
-    // Fetch new transactions for all addresses
-    const endBlockDisplay = endBlockNumber === null ? 'latest' : endBlockNumber
-    console.log(`[Strategy: ethquake] Fetching new transactions since block ${startBlockNumber} to ${endBlockDisplay} for ${addressesOfInterest.length} addresses...`)
-    
     const minWeiValue = BigInt(minEthValue) * BigInt(WEI_TO_ETH)
-    let newTransactions: any[] = []
-    
-    // Process addresses in chunks because the API has limits
+    let newTransactions: Array<{
+      hash: string
+      block_number: number
+      block_timestamp: number
+      from_address: string
+      to_address: string
+      txDateTime: string
+      value: string | number
+      valueInEth: number
+      addressOfInterest: string
+      direction: 'sent' | 'received'
+    }> = []
+
+    const overlap = DEFAULT_OVERLAP_SECONDS
+    const nowSec = Math.floor(Date.now() / 1000)
+    const globalEndTs = toTimestamp ?? nowSec
+
+    // Helper to fetch all pages for an address and a direction
+    const fetchPagedFor = async (params: Record<string, string | number>) => {
+      const total: TWTransaction[] = []
+      for (let page = 0; page <= 500; page++) {
+        const txs = await fetchTransactions({ ...params, page }) as TWTransaction[]
+        total.push(...txs)
+        if (!txs || txs.length < API_LIMIT) break
+      }
+      return total
+    }
+
+    // Process addresses in chunks
     const chunkSize = 20
     let processedAddressesCount = 0
-    
-    // Clear line and write initial status
-    process.stdout.write('\r\x1b[K') // Clear the current line
+    process.stdout.write('\r\x1b[K')
     process.stdout.write(`[Strategy: ethquake] Processing addresses: 0/${addressesOfInterest.length} | New transactions: 0. `)
-    
+
     for (let i = 0; i < addressesOfInterest.length; i += chunkSize) {
       const addressesChunk = addressesOfInterest.slice(i, i + chunkSize)
-      const chunkPromises = []
-      
-      for (const address of addressesChunk) {
-        if (!address) continue // Skip empty addresses because apparently that's a thing
 
-        // Need to check for both sending and receiving transactions
-        const fromPromise = fetchTransactions({
-          filter_from_address: address,
-          filter_block_number_gt: startBlockNumber,
-          filter_block_number_lte: endBlockNumber,
-          filter_value_gte: minWeiValue.toString()
-        }).then((txs: any[]) => txs.map((tx: any) => ({
+      const chunkPromises = addressesChunk.map(async rawAddr => {
+        const address = rawAddr.toLowerCase()
+        const addrLastSeen = addressLastSeenTs.get(address) || 0
+        const startTsBase = fromTimestamp ?? addrLastSeen
+        const startTs = Math.max(0, startTsBase - overlap)
+
+        const baseFilters = {
+          filter_block_timestamp_gte: startTs,
+          filter_block_timestamp_lte: globalEndTs,
+          filter_value_gte: (minWeiValue as bigint).toString()
+        }
+
+        const sent = await fetchPagedFor({ ...baseFilters, filter_from_address: address })
+        const received = await fetchPagedFor({ ...baseFilters, filter_to_address: address })
+
+        const mappedSent = sent.map(tx => ({
           hash: tx.hash,
-          block_number: tx.block_number,
-          block_timestamp: tx.block_timestamp,
+          block_number: Number(tx.block_number),
+          block_timestamp: Number(tx.block_timestamp),
           from_address: tx.from_address,
           to_address: tx.to_address,
-          txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+          txDateTime: new Date(Number(tx.block_timestamp) * 1000).toISOString(),
           value: tx.value,
           valueInEth: Number(tx.value) / (10 ** 18),
           addressOfInterest: address,
-          direction: 'sent'
-        })))
-        
-        const toPromise = fetchTransactions({
-          filter_to_address: address,
-          filter_block_number_gt: startBlockNumber,
-          filter_block_number_lte: endBlockNumber,
-          filter_value_gte: minWeiValue.toString()
-        }).then((txs: any[]) => txs.map((tx: any) => ({
+          direction: 'sent' as const
+        }))
+
+        const mappedReceived = received.map(tx => ({
           hash: tx.hash,
-          block_number: tx.block_number,
-          block_timestamp: tx.block_timestamp,
+          block_number: Number(tx.block_number),
+          block_timestamp: Number(tx.block_timestamp),
           from_address: tx.from_address,
           to_address: tx.to_address,
-          txDateTime: new Date(tx.block_timestamp * 1000).toISOString(),
+          txDateTime: new Date(Number(tx.block_timestamp) * 1000).toISOString(),
           value: tx.value,
           valueInEth: Number(tx.value) / (10 ** 18),
           addressOfInterest: address,
-          direction: 'received'
-        })))
-        
-        chunkPromises.push(fromPromise, toPromise)
-      }
-      
-      // Process this chunk
-      const chunkResults = await Promise.all(chunkPromises)
-      chunkResults.forEach((txs: any[]) => {
-        newTransactions = newTransactions.concat(txs)
+          direction: 'received' as const
+        }))
+
+        return [...mappedSent, ...mappedReceived]
       })
-      
+
+      const chunkResults = await Promise.all(chunkPromises)
+      for (const arr of chunkResults) newTransactions.push(...arr)
+
       processedAddressesCount += addressesChunk.length
-      
-      // Update the status line with current progress
-      process.stdout.write('\r\x1b[K') // Clear the current line
+      process.stdout.write('\r\x1b[K')
       process.stdout.write(`[Strategy: ethquake] Processing addresses: ${processedAddressesCount}/${addressesOfInterest.length} | New transactions: ${newTransactions.length}. `)
-      
-      // Wait 1 second before processing the next chunk to avoid rate limiting
-      if (i + chunkSize < addressesOfInterest.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-      }
+
+      if (i + chunkSize < addressesOfInterest.length) await new Promise(resolve => setTimeout(resolve, 1000))
     }
-    
-    // Move to new line after the progress updates
+
     console.log('')
     console.log(`\nFetched ${newTransactions.length} total new transactions.`)
-    
-    // Remove duplicates using a Map with transaction hash as key
-    const transactionMap = new Map()
-    
-    // First add existing transactions to the map
-    for (const tx of existingTransactions) {
-      transactionMap.set(tx.hash, tx)
-    }
-    
-    // Add new unique transactions to the map
-    let newUniqueCount = 0
+
+    // Dedupe by hash against existing
+    const existingHashes = new Set((existingTransactions as Array<any>).map(t => t.hash))
+    const newUniqueTxs = newTransactions.filter(t => !existingHashes.has(t.hash))
+    console.log(`Added ${newUniqueTxs.length} new unique transactions.`)
+
+    if (newUniqueTxs.length > 0) await saveTransactionsToMongo(newUniqueTxs as any[], db)
+    else console.log('No new transactions to save.')
+
+    // Update per-address watermarks based on newly seen data
+    const maxTsByAddress = new Map<string, number>()
     for (const tx of newTransactions) {
-      if (!transactionMap.has(tx.hash)) {
-        transactionMap.set(tx.hash, tx)
-        newUniqueCount++
+      const aFrom = tx.from_address?.toLowerCase()
+      const aTo = tx.to_address?.toLowerCase()
+      if (aFrom) {
+        const prev = maxTsByAddress.get(aFrom) || 0
+        if (tx.block_timestamp > prev) maxTsByAddress.set(aFrom, tx.block_timestamp)
+      }
+      if (aTo) {
+        const prev = maxTsByAddress.get(aTo) || 0
+        if (tx.block_timestamp > prev) maxTsByAddress.set(aTo, tx.block_timestamp)
       }
     }
-    
-    console.log(`Added ${newUniqueCount} new unique transactions.`)
-    
-    // Only save the new unique transactions to save time
-    if (newUniqueCount > 0) {
-      const newUniqueTxs = newTransactions.filter((tx: any) => !existingTransactions.some((e: any) => e.hash === tx.hash))
-      await saveTransactionsToMongo(newUniqueTxs, db)
-    } else {
-      console.log('No new transactions to save.')
+
+    if (maxTsByAddress.size > 0) {
+      const ops: any[] = []
+      for (const [addr, ts] of maxTsByAddress.entries()) {
+        ops.push({
+          updateOne: {
+            filter: { address: addr },
+            update: { $set: { last_seen_ts: ts, last_polled_at: new Date() } },
+            upsert: false
+          }
+        })
+      }
+      if (ops.length > 0) await db.collection('addresses_of_interest').bulkWrite(ops)
     }
-    
+
     return {
-      allTransactionsCount: transactionMap.size,
-      newTransactionsCount: newUniqueCount
+      allTransactionsCount: (existingTransactions.length + newUniqueTxs.length),
+      newTransactionsCount: newUniqueTxs.length
     }
   } finally {
     // Close MongoDB connection if we opened it
