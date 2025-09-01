@@ -49,11 +49,11 @@ async function verifyOrderPlaced(orderId: string, isStopOrder: boolean = true): 
 function getPositionSize(symbol: string): number {
   const positionSizes: { [key: string]: number } = {
     'PF_SUIUSD': 2.0,    // SUI - 
-    'PF_SOLUSD': 2.0,    // SOL - 
-    'PF_WIFUSD': 3.5,    // WIF - 
-    'PF_XRPUSD': 2.0,    // XRP - 
-    'PF_ETHUSD': 2.5,    // ETH - 
-    'PF_XBTUSD': 2.5,
+    'PF_SOLUSD': 2.5,    // SOL - 
+    'PF_WIFUSD': 2.0,    // WIF - 
+    'PF_XRPUSD': 2.5,    // XRP - 
+    'PF_ETHUSD': 3.0,    // ETH - 
+    'PF_XBTUSD': 3.0,
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -65,7 +65,7 @@ function getPositionSize(symbol: string): number {
  */
 function getFixedStopDistance(symbol: string): number {
   const stopDistances: { [key: string]: number } = {
-    'PF_SUIUSD': 4.6,
+    'PF_SUIUSD': 3.0,
     'PF_SOLUSD': 5.1,
     'PF_ETHUSD': 4.1,
     'PF_XBTUSD': 2.1,
