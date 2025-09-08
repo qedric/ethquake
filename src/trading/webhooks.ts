@@ -54,6 +54,7 @@ function getPositionSize(symbol: string): number {
     'PF_XRPUSD': 2.5,    // XRP - 
     'PF_ETHUSD': 3.0,    // ETH - 
     'PF_XBTUSD': 3.0,
+    'PF_LTCUSD': 2.0,    // LTC - 
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -71,6 +72,7 @@ function getFixedStopDistance(symbol: string): number {
     'PF_XBTUSD': 2.1,
     'PF_WIFUSD': 4.1,
     'PF_XRPUSD': 2.0,
+    'PF_LTCUSD': 2.1,
   }
   
   return stopDistances[symbol] || 7 // Default to 7% if symbol not found
@@ -87,7 +89,8 @@ function getPositionSizeType(symbol: string): 'risk' | 'percent' | 'fixed' {
     'PF_ETHUSD': 'risk',
     'PF_XBTUSD': 'risk',
     'PF_WIFUSD': 'risk',
-    'PF_XRPUSD': 'risk'
+    'PF_XRPUSD': 'risk',
+    'PF_LTCUSD': 'risk'
   }
   return positionSizeTypes[symbol] || 'risk' // All instruments currently use risk-based sizing
 }
@@ -258,15 +261,17 @@ export async function executeTradingViewTrade(
       'PF_ETHUSD': 0.001, // ETH minimum 0.001 units
       'PF_XBTUSD': 0.0001, // XBT minimum 0.0001 units
       'PF_WIFUSD': 1, // WIF minimum 0.0001 units
+      'PF_LTCUSD': 0.01, // LTC minimum 0.01 units
     }
 
     // Maximum position size for safety
     const maxPositionSizes: { [key: string]: number } = {
       'PF_SUIUSD': 2000,    // SUI minimum 1 unit
-      'PF_SOLUSD': 30, // SOL minimum 0.01 units
+      'PF_SOLUSD': 50, // SOL minimum 0.01 units
       'PF_ETHUSD': 3, // ETH minimum 0.001 units
       'PF_XBTUSD': 0.06, // XBT minimum 0.0001 units
       'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
+      'PF_LTCUSD': 70, // LTC minimum 0.01 units
     }
     
       const minSize = minPositionSizes[tradingPair] || 0.01
@@ -440,7 +445,10 @@ function mapTickerToTradingPair(ticker: string): string {
     'WIFUSD.PM': 'PF_WIFUSD',
     'XRPUSD': 'PF_XRPUSD',
     'XRP/USD': 'PF_XRPUSD',
-    'XRPUSD.PM': 'PF_XRPUSD'
+    'XRPUSD.PM': 'PF_XRPUSD',
+    'LTCUSD': 'PF_LTCUSD',
+    'LTC/USD': 'PF_LTCUSD',
+    'LTCUSD.PM': 'PF_LTCUSD'
   }
 
   return mappings[tickerUpper] || tickerUpper

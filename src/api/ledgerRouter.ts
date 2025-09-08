@@ -280,7 +280,8 @@ router.get('/symbols', async (req, res) => {
       'PF_SOLUSD',
       'PF_SUIUSD',
       'PF_WIFUSD',
-      'PF_XRPUSD'
+      'PF_XRPUSD',
+      'PF_LTCUSD'
     ]
     
     console.log('[Ledger API] Returning symbols:', symbols)
