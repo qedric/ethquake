@@ -183,6 +183,7 @@ router.get('/ledger', async (req, res) => {
   try {
     const { 
       symbol, 
+      symbols, 
       start_date, 
       end_date, 
       limit = 1000,
@@ -194,9 +195,19 @@ router.get('/ledger', async (req, res) => {
       offset: parseInt(offset as string)
     }
 
-    if (symbol) {
-      params.symbol = symbol
-    }
+    // Parse multi-select symbols (CSV). Backwards compatible with single 'symbol'.
+    const parsedSymbols: string[] = (() => {
+      if (symbols && typeof symbols === 'string') {
+        return symbols.split(',').map(s => s.trim()).filter(Boolean)
+      }
+      if (symbol && typeof symbol === 'string') {
+        return [symbol]
+      }
+      return []
+    })()
+
+    // If exactly one symbol is requested, use upstream API filter for efficiency
+    if (parsedSymbols.length === 1) params.symbol = parsedSymbols[0]
 
     if (start_date) {
       params.start_date = start_date
@@ -213,7 +224,19 @@ router.get('/ledger', async (req, res) => {
     
     // Process and categorize the data
     const processedData = {
-      entries: ledgerData.ledgers || [],
+      entries: [] as Array<{
+        time: number
+        type: string
+        symbol: string
+        description: string
+        amount: string
+        balance: string
+        realizedPnL?: string | null
+        fee?: string | null
+        feeCurrency?: string | null
+        executionPrice?: string | null
+        executionSize?: string | null
+      }>,
       summary: {
         totalPnL: 0,
         totalFees: 0,
@@ -223,8 +246,16 @@ router.get('/ledger', async (req, res) => {
       }
     }
 
+    // Filter by symbols if provided (handles multi-select). If none provided, use all.
+    const rawEntries = (ledgerData.ledgers || []) as typeof processedData.entries
+    const entries = parsedSymbols.length > 0
+      ? rawEntries.filter(e => parsedSymbols.includes(e.symbol))
+      : rawEntries
+
+    processedData.entries = entries
+
     // Calculate summary statistics
-    processedData.entries.forEach((entry: any) => {
+    processedData.entries.forEach((entry) => {
       // Calculate PnL from realizedPnL field
       if (entry.realizedPnL) {
         const pnl = parseFloat(entry.realizedPnL)
@@ -272,19 +303,13 @@ router.get('/balance', async (req, res) => {
 router.get('/symbols', async (req, res) => {
   console.log('[Ledger API] Received request for symbols')
   try {
-    // This would typically come from a separate API call to get available instruments
-    // For now, returning the common ones we know about
-    const symbols = [
-      'PF_ETHUSD',
-      'PF_XBTUSD', 
-      'PF_SOLUSD',
-      'PF_SUIUSD',
-      'PF_WIFUSD',
-      'PF_XRPUSD',
-      'PF_LTCUSD'
-    ]
-    
-    console.log('[Ledger API] Returning symbols:', symbols)
+    // Derive symbols from recent ledger entries to reflect actual activity
+    const ledgerData = await getLedgerEntries({ limit: 1000 })
+    const entries = (ledgerData.ledgers || []) as Array<{ symbol?: string }>
+    const symbolsSet = new Set<string>()
+    entries.forEach(e => { if (e.symbol) symbolsSet.add(e.symbol) })
+    const symbols = Array.from(symbolsSet).sort()
+    console.log('[Ledger API] Returning detected symbols:', symbols)
     res.json({ symbols })
   } catch (error) {
     console.error('Error fetching symbols:', error)

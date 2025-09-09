@@ -490,10 +490,8 @@
     <div class="controls">
       <div class="filters">
         <div class="filter-group">
-          <label for="symbol">Symbol</label>
-          <select id="symbol">
-            <option value="">All Symbols</option>
-          </select>
+          <label for="symbol">Symbols</label>
+          <select id="symbol" multiple></select>
         </div>
         
         <div class="filter-group">
@@ -658,12 +656,17 @@
         console.log('Symbols data:', data)
         
         const symbolSelect = document.getElementById('symbol')
+        symbolSelect.innerHTML = ''
         data.symbols.forEach(symbol => {
           const option = document.createElement('option')
           option.value = symbol
           option.textContent = symbol
           symbolSelect.appendChild(option)
         })
+        // Adjust visible size for multi-select for better usability
+        if (data.symbols && Array.isArray(data.symbols)) {
+          symbolSelect.size = Math.min(Math.max(data.symbols.length, 4), 12)
+        }
       } catch (error) {
         console.error('Error loading symbols:', error)
         showError('Failed to load symbols: ' + error.message)
@@ -676,7 +679,8 @@
       hideError()
       
       try {
-        const symbol = document.getElementById('symbol').value
+        const symbolSelect = document.getElementById('symbol')
+        const selectedSymbols = Array.from(symbolSelect.selectedOptions || []).map(o => o.value).filter(Boolean)
         const startDate = document.getElementById('startDate').value
         const endDate = document.getElementById('endDate').value
         const limit = document.getElementById('limit').value
@@ -686,9 +690,9 @@
           offset: currentOffset.toString()
         })
         
-        if (symbol) {
-          params.append('symbol', symbol)
-          console.log('Adding symbol filter:', symbol)
+        if (selectedSymbols.length > 0) {
+          params.append('symbols', selectedSymbols.join(','))
+          console.log('Adding symbols filter:', selectedSymbols.join(','))
         }
         if (startDate) {
           params.append('start_date', startDate)
@@ -1129,7 +1133,8 @@
     
     // Reset filters
     function resetFilters() {
-      document.getElementById('symbol').value = ''
+      const symbolSelect = document.getElementById('symbol')
+      Array.from(symbolSelect.options).forEach(o => o.selected = false)
       setDefaultDates()
       currentOffset = 0
       loadData()
@@ -1180,23 +1185,16 @@
       table.style.display = 'none'
       noData.style.display = 'none'
       
-      // Get all available symbols
-      const availableSymbols = [
-        'PF_ETHUSD',
-        'PF_XBTUSD', 
-        'PF_SOLUSD',
-        'PF_SUIUSD',
-        'PF_WIFUSD',
-        'PF_XRPUSD'
-      ]
-      
       // Use the filtered entries (same as ledger table)
       const filteredEntries = allEntries
-      
+
+      // Derive symbols from the filtered entries
+      const availableSymbols = Array.from(new Set(filteredEntries.map(e => e.symbol).filter(Boolean))).sort()
+
       // Group by symbol
       const symbolStats = {}
-      
-      // Initialize all symbols with zero stats
+
+      // Initialize all detected symbols with zero stats
       availableSymbols.forEach(symbol => {
         symbolStats[symbol] = {
           totalPnL: 0,
