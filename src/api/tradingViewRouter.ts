@@ -1,6 +1,7 @@
 import express from 'express'
 import { getDb } from '../lib/mongodb.js'
 import { executeTradingViewTrade } from '../trading/webhooks.js'
+import { sendAlert } from '../alerts/index.js'
 
 const router = express.Router()
 
@@ -159,6 +160,19 @@ router.post('/alert-hook', (req, res) => {
 
   // Store the alert, then process the trade (skip if exchange disabled)
   storeAlert(alert).then(async () => {
+    // Send Telegram receipt alert for every valid TradingView webhook
+    try {
+      const action = (alert.strategy?.order?.action || '').toUpperCase()
+      const curr = (alert.strategy?.current_position || '').toUpperCase()
+      const prev = (alert.strategy?.prev_position || '').toUpperCase()
+      const tvMsg = alert.message ? `\nMsg: ${alert.message}` : ''
+      const ts = alert.timestamp || new Date().toISOString()
+      const receipt = `TradingView Webhook Received\nTicker: ${alert.ticker}\nAction: ${action}\nPosition: ${prev} -> ${curr}\nTime: ${ts}${tvMsg}`
+      sendAlert(receipt, 'tradingview')
+    } catch (notifyErr) {
+      console.warn('Failed to send TradingView receipt alert:', notifyErr)
+    }
+
     if (process.env.DISABLE_EXCHANGE === '1') {
       res.status(200).json({
         success: true,

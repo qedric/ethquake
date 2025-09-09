@@ -1,5 +1,5 @@
 import { placeOrderWithExits, placeStandaloneOrder, getCurrentPrice, calculatePositionSize, cleanupPosition, roundPrice, getPricePrecision, getPositionSizePrecision, getOpenPositions, getOrderStatus } from './kraken.js'
-//import { sendAlert } from '../alerts/index.js'
+import { sendAlert } from '../alerts/index.js'
 
 // Per-symbol async lock to serialize webhook processing for each trading pair
 const symbolLocks = new Map<string, Promise<void>>()
@@ -192,7 +192,7 @@ export async function executeTradingViewTrade(
         }
         
         console.log(`[TradingView Webhook] Successfully closed existing position for ${ticker}`)
-        //sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`)
+        sendAlert(`TradingView position reverse for ${ticker}: Closed ${trimmedPrevPosition} position`, 'tradingview')
       }
 
       // Handle position close - actually close the existing position
@@ -229,7 +229,7 @@ export async function executeTradingViewTrade(
         }
         
         console.log(`[TradingView Webhook] Successfully closed ${trimmedPrevPosition} position for ${ticker}`)
-        //sendAlert(`TradingView position close for ${ticker}: Closed ${trimmedPrevPosition} position`)
+        sendAlert(`TradingView position close for ${ticker}: Closed ${trimmedPrevPosition} position`, 'tradingview')
         
         return {
           success: true,
@@ -363,7 +363,7 @@ export async function executeTradingViewTrade(
 
     console.log('alertMessage', alertMessage)
     
-    //sendAlert(alertMessage)
+    sendAlert(alertMessage, 'tradingview')
 
       console.log(`[TradingView Webhook] Trade execution completed for ${ticker}`)
       return {
@@ -385,7 +385,7 @@ export async function executeTradingViewTrade(
 
   } catch (error) {
     console.error('[TradingView Webhook] Error executing trade:', error)
-    //sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}`)
+    sendAlert(`TradingView webhook trade failed for ${ticker}: ${error instanceof Error ? error.message : String(error)}` , 'tradingview')
     throw error
   }
 }
