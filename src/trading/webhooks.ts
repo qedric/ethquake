@@ -54,7 +54,7 @@ function getPositionSize(symbol: string): number {
     'PF_XRPUSD': 2.5,    // XRP - 
     'PF_ETHUSD': 3.0,    // ETH - 
     'PF_XBTUSD': 3.0,
-    'PF_LTCUSD': 2.0,    // LTC - 
+    'PF_LTCUSD': 3.0,    // LTC - 
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
