@@ -5,6 +5,35 @@ import { sendAlert } from '../alerts/index.js'
 
 const router = express.Router()
 
+// Simple in-memory deduplication of TradingView alerts
+// Prevents processing identical alerts received within a short time window
+const recentAlerts = new Map<string, number>()
+const DEDUPE_WINDOW_MS = 10000
+
+function makeAlertKey(body: any): string {
+  const action = (body?.strategy?.order?.action || '').toLowerCase()
+  const ticker = (body?.ticker || '').toUpperCase()
+  const current = (body?.strategy?.current_position || '').toLowerCase()
+  const prev = (body?.strategy?.prev_position || '').toLowerCase()
+  // Include sanitized message without secret to tighten key without leaking secrets
+  const message = typeof body?.message === 'string' ? body.message : ''
+  return `${ticker}|${action}|${prev}->${current}|${message}`
+}
+
+function isDuplicateAlert(key: string, now: number): boolean {
+  const last = recentAlerts.get(key)
+  if (last && now - last < DEDUPE_WINDOW_MS) return true
+  return false
+}
+
+function rememberAlert(key: string, now: number) {
+  recentAlerts.set(key, now)
+  // Opportunistic cleanup of old entries
+  for (const [k, t] of recentAlerts) {
+    if (now - t > 60_000) recentAlerts.delete(k)
+  }
+}
+
 interface TradingViewAlert {
   strategy: {
     order: {
@@ -131,6 +160,25 @@ router.post('/alert-hook', (req, res) => {
   }
 
   console.log('Received TradingView webhook:', sanitizedBody)
+
+  // Deduplicate identical alerts arriving in a very short window
+  const now = Date.now()
+  const alertKey = makeAlertKey(sanitizedBody)
+  const lastSeen = recentAlerts.get(alertKey)
+  const ageMs = typeof lastSeen === 'number' ? now - lastSeen : null
+  if (isDuplicateAlert(alertKey, now)) {
+    console.warn('[Dedupe] Duplicate alert skipped', {
+      ticker: sanitizedBody?.ticker,
+      action: sanitizedBody?.strategy?.order?.action,
+      prev: sanitizedBody?.strategy?.prev_position,
+      current: sanitizedBody?.strategy?.current_position,
+      ageMs,
+      windowMs: DEDUPE_WINDOW_MS
+    })
+    res.status(200).json({ success: true, message: 'Duplicate alert skipped', skipped: true })
+    return
+  }
+  rememberAlert(alertKey, now)
 
   // Validate TradingView request
   if (!validateTradingViewRequest(req)) {
