@@ -174,6 +174,20 @@ export async function executeTradingViewTrade(
       const positionChange = determinePositionChange(effectivePrevPosition, trimmedCurrentPosition)
       console.log(`[TradingView Webhook] Position change type: ${positionChange} from ${effectivePrevPosition} to ${trimmedCurrentPosition} based on ${direction} signal`)
 
+      // If no change is required, do nothing
+      if (positionChange === 'no_change') {
+        console.log(`[TradingView Webhook] No position change for ${ticker}. Skipping order placement`)
+        sendAlert(`TradingView ${direction.toUpperCase()} signal for ${ticker}\nNo position change required (${effectivePrevPosition} -> ${trimmedCurrentPosition})`, 'tradingview')
+        return {
+          success: true,
+          direction,
+          ticker,
+          action: 'no_change',
+          positionChange: `${effectivePrevPosition} -> ${trimmedCurrentPosition}`,
+          message: 'No action taken'
+        }
+      }
+
       // Handle reverse position changes - close existing position first
       if (positionChange === 'reverse_position') {
         console.log(`[TradingView Webhook] Reverse position detected - closing existing ${trimmedPrevPosition} position first`)
