@@ -56,6 +56,7 @@ function getPositionSize(symbol: string): number {
     'PF_XBTUSD': 3.0,
     'PF_LTCUSD': 4.5,    // LTC - 
     'PF_LINKUSD': 3.0,
+    'PF_PEPEUSD': 2.0,
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -75,6 +76,7 @@ function getFixedStopDistance(symbol: string): number {
     'PF_XRPUSD': 1.6,
     'PF_LTCUSD': 2.1,
     'PF_LINKUSD': 3.5,
+    'PF_PEPEUSD': 3.2,
   }
   
   return stopDistances[symbol] || 7 // Default to 7% if symbol not found
@@ -94,6 +96,7 @@ function getPositionSizeType(symbol: string): 'risk' | 'percent' | 'fixed' {
     'PF_XRPUSD': 'risk',
     'PF_LTCUSD': 'risk',
     'PF_LINKUSD': 'risk',
+    'PF_PEPEUSD': 'risk',
   }
   return positionSizeTypes[symbol] || 'risk' // All instruments currently use risk-based sizing
 }
@@ -280,6 +283,7 @@ export async function executeTradingViewTrade(
       'PF_WIFUSD': 1, // WIF minimum 0.0001 units
       'PF_LTCUSD': 0.01, // LTC minimum 0.01 units
       'PF_LINKUSD': 0.1, // LINK minimum 0.1 units
+      'PF_PEPEUSD': 500000, // PEPE minimum order size
     }
 
     // Maximum position size for safety
@@ -291,6 +295,7 @@ export async function executeTradingViewTrade(
       'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
       'PF_LTCUSD': 70, // LTC minimum 0.01 units
       'PF_LINKUSD': 200, // LINK minimum 0.1 units
+      'PF_PEPEUSD': 500000000, // PEPE minimum units
     }
     
       const minSize = minPositionSizes[tradingPair] || 0.01
@@ -471,6 +476,9 @@ function mapTickerToTradingPair(ticker: string): string {
     'LINKUSD': 'PF_LINKUSD',
     'LINK/USD': 'PF_LINKUSD',
     'LINKUSD.PM': 'PF_LINKUSD',
+    'PEPEUSD': 'PF_PEPEUSD',
+    'PEPE/USD': 'PF_PEPEUSD',
+    'PEPEUSD.PM': 'PF_PEPEUSD',
   }
 
   return mappings[tickerUpper] || tickerUpper
