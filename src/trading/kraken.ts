@@ -105,7 +105,8 @@ export function getPositionSizePrecision(tradingPair: string): number {
     'PF_XBTUSD': 4,  // XBT (BTC) uses 4 decimal places
     'PF_WIFUSD': 0,  // WIF uses 0 decimal places
     'PF_XRPUSD': 0,  // XRP uses 0 decimal place
-    'PF_LTCUSD': 2,  // LTC uses 2 decimal places
+    'PF_LTCUSD': 2,  // LTC uses 2 decimal places,
+    'PF_LINKUSD': 1,  // LINK uses 1 decimal place
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
@@ -123,7 +124,8 @@ export function getPricePrecision(tradingPair: string): number {
     'PF_XBTUSD': 0,  // XBT (BTC) uses 0 decimal place
     'PF_WIFUSD': 4,  // WIF uses 0 decimal place
     'PF_XRPUSD': 5,  // XRP uses 4 decimal place
-    'PF_LTCUSD': 2,  // LTC uses 2 decimal places
+    'PF_LTCUSD': 2,  // LTC uses 2 decimal places,
+    'PF_LINKUSD': 3,  // LINK uses 3 decimal places
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places

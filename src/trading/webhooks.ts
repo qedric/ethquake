@@ -55,6 +55,7 @@ function getPositionSize(symbol: string): number {
     'PF_ETHUSD': 3.0,    // ETH - 
     'PF_XBTUSD': 3.0,
     'PF_LTCUSD': 4.5,    // LTC - 
+    'PF_LINKUSD': 3.0,
   }
   
   return positionSizes[symbol] || 5.0 // Default to 5% if symbol not found
@@ -73,6 +74,7 @@ function getFixedStopDistance(symbol: string): number {
     'PF_WIFUSD': 4.1,
     'PF_XRPUSD': 1.6,
     'PF_LTCUSD': 2.1,
+    'PF_LINKUSD': 3.5,
   }
   
   return stopDistances[symbol] || 7 // Default to 7% if symbol not found
@@ -90,7 +92,8 @@ function getPositionSizeType(symbol: string): 'risk' | 'percent' | 'fixed' {
     'PF_XBTUSD': 'risk',
     'PF_WIFUSD': 'risk',
     'PF_XRPUSD': 'risk',
-    'PF_LTCUSD': 'risk'
+    'PF_LTCUSD': 'risk',
+    'PF_LINKUSD': 'risk',
   }
   return positionSizeTypes[symbol] || 'risk' // All instruments currently use risk-based sizing
 }
@@ -276,6 +279,7 @@ export async function executeTradingViewTrade(
       'PF_XBTUSD': 0.0001, // XBT minimum 0.0001 units
       'PF_WIFUSD': 1, // WIF minimum 0.0001 units
       'PF_LTCUSD': 0.01, // LTC minimum 0.01 units
+      'PF_LINKUSD': 0.1, // LINK minimum 0.1 units
     }
 
     // Maximum position size for safety
@@ -286,6 +290,7 @@ export async function executeTradingViewTrade(
       'PF_XBTUSD': 0.06, // XBT minimum 0.0001 units
       'PF_WIFUSD': 4000, // WIF minimum 0.0001 units
       'PF_LTCUSD': 70, // LTC minimum 0.01 units
+      'PF_LINKUSD': 200, // LINK minimum 0.1 units
     }
     
       const minSize = minPositionSizes[tradingPair] || 0.01
@@ -462,7 +467,10 @@ function mapTickerToTradingPair(ticker: string): string {
     'XRPUSD.PM': 'PF_XRPUSD',
     'LTCUSD': 'PF_LTCUSD',
     'LTC/USD': 'PF_LTCUSD',
-    'LTCUSD.PM': 'PF_LTCUSD'
+    'LTCUSD.PM': 'PF_LTCUSD',
+    'LINKUSD': 'PF_LINKUSD',
+    'LINK/USD': 'PF_LINKUSD',
+    'LINKUSD.PM': 'PF_LINKUSD',
   }
 
   return mappings[tickerUpper] || tickerUpper
