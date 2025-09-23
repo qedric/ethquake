@@ -107,7 +107,7 @@ export function getPositionSizePrecision(tradingPair: string): number {
     'PF_XRPUSD': 0,  // XRP uses 0 decimal place
     'PF_LTCUSD': 2,  // LTC uses 2 decimal places,
     'PF_LINKUSD': 1,  // LINK uses 1 decimal place,
-    'PF_PEPEUSD': 0,  // PEPE requires whole numbers
+    'PF_PEPEUSD': -3,  // PEPE requires rounding to nearest 1000 (contractValueTradePrecision: -3)
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
@@ -235,7 +235,13 @@ export async function calculatePositionSize(
     
     // Round to specified precision or use default
     const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
-    return Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    if (precisionToUse < 0) {
+      // For negative precision, round to nearest multiple of 10^|precision|
+      const multiplier = Math.pow(10, Math.abs(precisionToUse))
+      return Math.round(positionSizeInUnits / multiplier) * multiplier
+    } else {
+      return Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    }
   }
 
   if (positionSizeType === 'risk') {
@@ -257,7 +263,14 @@ export async function calculatePositionSize(
     // Round to specified precision or use default
     const precisionToUse = precision !== undefined ? precision : 2 // Default to 2 decimal places
 
-    const calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    let calculatedSize: number
+    if (precisionToUse < 0) {
+      // For negative precision, round to nearest multiple of 10^|precision|
+      const multiplier = Math.pow(10, Math.abs(precisionToUse))
+      calculatedSize = Math.round(positionSizeInUnits / multiplier) * multiplier
+    } else {
+      calculatedSize = Math.round(positionSizeInUnits * Math.pow(10, precisionToUse)) / Math.pow(10, precisionToUse)
+    }
     console.log(`[Symbol: ${symbol}] Calculated position size: ${calculatedSize} units`)
     return calculatedSize
   }
