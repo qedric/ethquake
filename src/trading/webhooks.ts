@@ -73,7 +73,7 @@ function getFixedStopDistance(symbol: string): number {
     'PF_ETHUSD': 4.1,
     'PF_XBTUSD': 2.1,
     'PF_WIFUSD': 1.9,
-    'PF_XRPUSD': 1.1,
+    'PF_XRPUSD': 0.8,
     'PF_LTCUSD': 2.1,
     'PF_LINKUSD': 3.5,
     'PF_PEPEUSD': 2.1,
