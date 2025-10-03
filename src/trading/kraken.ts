@@ -108,6 +108,7 @@ export function getPositionSizePrecision(tradingPair: string): number {
     'PF_LTCUSD': 2,  // LTC uses 2 decimal places,
     'PF_LINKUSD': 1,  // LINK uses 1 decimal place,
     'PF_PEPEUSD': -3,  // PEPE requires rounding to nearest 1000 (contractValueTradePrecision: -3)
+    'PF_UNIUSD': 1,  // UNI uses 1 decimal place
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
@@ -128,6 +129,7 @@ export function getPricePrecision(tradingPair: string): number {
     'PF_LTCUSD': 2,  // LTC uses 2 decimal places,
     'PF_LINKUSD': 3,  // LINK uses 3 decimal places
     'PF_PEPEUSD': 10,  // PEPE requires 10 decimal places
+    'PF_UNIUSD': 3,  // UNI uses 3 decimal places
   }
   
   return precisionMap[tradingPair] ?? 2 // Default to 2 decimal places
