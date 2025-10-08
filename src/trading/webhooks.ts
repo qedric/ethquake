@@ -78,7 +78,7 @@ function getFixedStopDistance(symbol: string): number {
     'PF_LTCUSD': 2.1,
     'PF_LINKUSD': 3.5,
     'PF_PEPEUSD': 2.1,
-    'PF_UNIUSD': 1.1,
+    'PF_UNIUSD': 1.6,
   }
   
   return stopDistances[symbol] || 7 // Default to 7% if symbol not found
